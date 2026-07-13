@@ -152,12 +152,13 @@ return Theme
 
 end)()
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
 
 local KryptexUI = {
-	Version = "0.3.4",
+	Version = "0.3.5",
 }
 
 local Window = {}
@@ -1316,6 +1317,7 @@ function Tab:CreateSlider(config)
 	local slider = {}
 	local dragging = false
 	local dragInput = nil
+	local lastDragX = nil
 
 	local function snap(newValue)
 		newValue = math.clamp(newValue, minimum, maximum)
@@ -1372,11 +1374,40 @@ function Tab:CreateSlider(config)
 		slider:Set(minimum + ((maximum - minimum) * alpha))
 	end
 
-	local function beginDrag(input)
+	local function beginDragFromX(x, input)
 		dragging = true
-		dragInput = input
-		updateFromX(input.Position.X)
+		dragInput = input or dragInput
+		lastDragX = x
+		updateFromX(x)
 	end
+
+	local function beginDrag(input)
+		beginDragFromX(input.Position.X, input)
+	end
+
+	local function inputIsInSliderArea(input)
+		local position = input.Position
+
+		if not position then
+			return false
+		end
+
+		local areaPosition = hitbox.AbsolutePosition
+		local areaSize = hitbox.AbsoluteSize
+
+		return position.X >= areaPosition.X
+			and position.X <= areaPosition.X + areaSize.X
+			and position.Y >= areaPosition.Y
+			and position.Y <= areaPosition.Y + areaSize.Y
+	end
+
+	local function beginDragFromMouseLocation()
+		local mouseLocation = UserInputService:GetMouseLocation()
+		beginDragFromX(mouseLocation.X)
+	end
+
+	self.Window._maid:Give(hitbox.MouseButton1Down:Connect(beginDragFromMouseLocation))
+	self.Window._maid:Give(knob.MouseButton1Down:Connect(beginDragFromMouseLocation))
 
 	self.Window._maid:Give(hitbox.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -1396,6 +1427,16 @@ function Tab:CreateSlider(config)
 		end
 	end))
 
+	self.Window._maid:Give(UserInputService.InputBegan:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+			return
+		end
+
+		if inputIsInSliderArea(input) then
+			beginDrag(input)
+		end
+	end))
+
 	self.Window._maid:Give(UserInputService.InputChanged:Connect(function(input)
 		if not dragging then
 			return
@@ -1404,6 +1445,7 @@ function Tab:CreateSlider(config)
 		if input.UserInputType == Enum.UserInputType.MouseMovement
 			or input == dragInput
 			or input.UserInputType == Enum.UserInputType.Touch then
+			lastDragX = input.Position.X
 			updateFromX(input.Position.X)
 		end
 	end))
@@ -1414,6 +1456,24 @@ function Tab:CreateSlider(config)
 			or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = false
 			dragInput = nil
+			lastDragX = nil
+		end
+	end))
+
+	self.Window._maid:Give(RunService.RenderStepped:Connect(function()
+		if not dragging then
+			return
+		end
+
+		if dragInput and dragInput.UserInputType == Enum.UserInputType.Touch and lastDragX then
+			updateFromX(lastDragX)
+			return
+		end
+
+		local mouseLocation = UserInputService:GetMouseLocation()
+
+		if mouseLocation then
+			updateFromX(mouseLocation.X)
 		end
 	end))
 
