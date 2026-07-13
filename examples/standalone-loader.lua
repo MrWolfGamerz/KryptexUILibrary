@@ -30,6 +30,11 @@ local Window = KryptexUI:CreateWindow({
 
 local MainTab = Window:CreateTab("Main")
 
+MainTab:CreateParagraph({
+	Title = "Standalone Ready",
+	Content = "This UI was loaded from the generated dist file and can still use the full component API.",
+})
+
 MainTab:CreateButton({
 	Name = "Test Button",
 	ButtonText = "Run",
@@ -50,3 +55,10 @@ MainTab:CreateToggle({
 	end,
 })
 
+MainTab:CreateKeybind({
+	Name = "Toggle UI",
+	CurrentKeybind = Enum.KeyCode.RightShift,
+	Callback = function()
+		Window:Toggle()
+	end,
+})

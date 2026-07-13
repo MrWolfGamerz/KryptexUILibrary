@@ -15,6 +15,11 @@ MainTab:CreateSection("Basics")
 
 MainTab:CreateLabel("This is the first Kryptex UI demo.")
 
+MainTab:CreateParagraph({
+	Title = "Polished Controls",
+	Content = "Kryptex UI includes animated tabs, hover states, focused inputs, notifications, and a standalone loader build.",
+})
+
 MainTab:CreateButton({
 	Name = "Notification",
 	ButtonText = "Show",
@@ -66,6 +71,14 @@ MainTab:CreateInput({
 	end,
 })
 
+MainTab:CreateKeybind({
+	Name = "Toggle Window",
+	CurrentKeybind = Enum.KeyCode.RightShift,
+	Callback = function()
+		Window:Toggle()
+	end,
+})
+
 local SettingsTab = Window:CreateTab("Settings")
 
 SettingsTab:CreateSection("Window")
@@ -78,3 +91,6 @@ SettingsTab:CreateButton({
 	end,
 })
 
+SettingsTab:CreateDivider("Footer")
+
+SettingsTab:CreateLabel("Kryptex UI v" .. KryptexUI.Version)

@@ -87,11 +87,17 @@ Theme.Presets = {
 		Background = Color3.fromRGB(15, 17, 24),
 		Surface = Color3.fromRGB(23, 26, 36),
 		SurfaceLight = Color3.fromRGB(32, 36, 48),
+		SurfaceMuted = Color3.fromRGB(19, 22, 31),
 		Stroke = Color3.fromRGB(52, 58, 76),
 		Text = Color3.fromRGB(240, 244, 252),
 		MutedText = Color3.fromRGB(154, 164, 184),
 		Accent = Color3.fromRGB(0, 190, 170),
 		AccentDark = Color3.fromRGB(0, 137, 125),
+		AccentLight = Color3.fromRGB(48, 231, 211),
+		Accent2 = Color3.fromRGB(106, 139, 255),
+		Glow = Color3.fromRGB(0, 190, 170),
+		Success = Color3.fromRGB(63, 216, 132),
+		Warning = Color3.fromRGB(255, 190, 92),
 		Danger = Color3.fromRGB(244, 84, 84),
 		Shadow = Color3.fromRGB(5, 6, 10),
 	},
@@ -100,11 +106,17 @@ Theme.Presets = {
 		Background = Color3.fromRGB(11, 13, 18),
 		Surface = Color3.fromRGB(19, 22, 30),
 		SurfaceLight = Color3.fromRGB(29, 34, 45),
+		SurfaceMuted = Color3.fromRGB(16, 19, 26),
 		Stroke = Color3.fromRGB(48, 56, 72),
 		Text = Color3.fromRGB(238, 242, 248),
 		MutedText = Color3.fromRGB(148, 158, 176),
 		Accent = Color3.fromRGB(89, 178, 255),
 		AccentDark = Color3.fromRGB(42, 127, 204),
+		AccentLight = Color3.fromRGB(137, 203, 255),
+		Accent2 = Color3.fromRGB(131, 116, 255),
+		Glow = Color3.fromRGB(89, 178, 255),
+		Success = Color3.fromRGB(74, 215, 140),
+		Warning = Color3.fromRGB(255, 194, 94),
 		Danger = Color3.fromRGB(239, 86, 86),
 		Shadow = Color3.fromRGB(4, 5, 8),
 	},
@@ -138,7 +150,6 @@ end
 
 return Theme
 
-
 end)()
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -146,7 +157,7 @@ local UserInputService = game:GetService("UserInputService")
 
 
 local KryptexUI = {
-	Version = "0.1.0",
+	Version = "0.2.0",
 }
 
 local Window = {}
@@ -157,6 +168,14 @@ Tab.__index = Tab
 
 local DEFAULT_FONT = Enum.Font.Gotham
 local DEFAULT_BOLD_FONT = Enum.Font.GothamBold
+local MOTION = {
+	Fast = 0.1,
+	Normal = 0.16,
+	Slow = 0.28,
+}
+local activeTweens = setmetatable({}, {
+	__mode = "k",
+})
 
 local function corner(radius)
 	return Create.new("UICorner", {
@@ -169,6 +188,16 @@ local function stroke(theme, transparency)
 		Color = theme.Stroke,
 		Transparency = transparency or 0,
 		Thickness = 1,
+	})
+end
+
+local function gradient(theme, rotation)
+	return Create.new("UIGradient", {
+		Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, theme.Accent),
+			ColorSequenceKeypoint.new(1, theme.Accent2 or theme.AccentLight or theme.Accent),
+		}),
+		Rotation = rotation or 0,
 	})
 end
 
@@ -204,6 +233,40 @@ local function formatNumber(value)
 	return string.format("%.2f", value)
 end
 
+local function resolveKeyCode(keyCode)
+	if typeof(keyCode) == "EnumItem" then
+		return keyCode
+	end
+
+	if type(keyCode) == "string" then
+		local ok, enumItem = pcall(function()
+			return Enum.KeyCode[keyCode]
+		end)
+
+		if ok and enumItem then
+			return enumItem
+		end
+	end
+
+	return Enum.KeyCode.Unknown
+end
+
+local function mixColor(a, b, alpha)
+	return Color3.new(
+		a.R + ((b.R - a.R) * alpha),
+		a.G + ((b.G - a.G) * alpha),
+		a.B + ((b.B - a.B) * alpha)
+	)
+end
+
+local function lighten(color, amount)
+	return mixColor(color, Color3.fromRGB(255, 255, 255), amount or 0.08)
+end
+
+local function darken(color, amount)
+	return mixColor(color, Color3.fromRGB(0, 0, 0), amount or 0.08)
+end
+
 local function safePlayerGui()
 	local localPlayer = Players.LocalPlayer
 	assert(localPlayer, "KryptexUI must be required from a LocalScript.")
@@ -212,11 +275,22 @@ local function safePlayerGui()
 end
 
 local function animate(instance, goals, duration)
+	if activeTweens[instance] then
+		activeTweens[instance]:Cancel()
+	end
+
 	local tween = TweenService:Create(
 		instance,
-		TweenInfo.new(duration or 0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		TweenInfo.new(duration or MOTION.Normal, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
 		goals
 	)
+
+	activeTweens[instance] = tween
+	tween.Completed:Connect(function()
+		if activeTweens[instance] == tween then
+			activeTweens[instance] = nil
+		end
+	end)
 
 	tween:Play()
 	return tween
@@ -251,15 +325,131 @@ function Window:_tween(instance, goals, duration)
 	return animate(instance, goals, duration)
 end
 
+function Window:_bindButtonMotion(button, normalColor, hoverColor, pressedColor)
+	local hovering = false
+	local holding = false
+
+	self._maid:Give(button.MouseEnter:Connect(function()
+		hovering = true
+
+		if not holding then
+			self:_tween(button, {
+				BackgroundColor3 = hoverColor,
+			}, MOTION.Fast)
+		end
+	end))
+
+	self._maid:Give(button.MouseLeave:Connect(function()
+		hovering = false
+
+		if not holding then
+			self:_tween(button, {
+				BackgroundColor3 = normalColor,
+			}, MOTION.Fast)
+		end
+	end))
+
+	self._maid:Give(button.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			holding = true
+			self:_tween(button, {
+				BackgroundColor3 = pressedColor,
+			}, MOTION.Fast)
+		end
+	end))
+
+	self._maid:Give(button.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			holding = false
+			self:_tween(button, {
+				BackgroundColor3 = hovering and hoverColor or normalColor,
+			}, MOTION.Fast)
+		end
+	end))
+end
+
+function Window:_bindTabMotion(tab)
+	local hovering = false
+	local holding = false
+
+	local function normalColor()
+		return self.CurrentTab == tab and self.Theme.SurfaceLight or self.Theme.SurfaceMuted
+	end
+
+	local function hoverColor()
+		return self.CurrentTab == tab and lighten(self.Theme.SurfaceLight, 0.04) or self.Theme.Surface
+	end
+
+	self._maid:Give(tab.Button.MouseEnter:Connect(function()
+		hovering = true
+
+		if not holding then
+			self:_tween(tab.Button, {
+				BackgroundColor3 = hoverColor(),
+			}, MOTION.Fast)
+		end
+	end))
+
+	self._maid:Give(tab.Button.MouseLeave:Connect(function()
+		hovering = false
+
+		if not holding then
+			self:_tween(tab.Button, {
+				BackgroundColor3 = normalColor(),
+			}, MOTION.Fast)
+		end
+	end))
+
+	self._maid:Give(tab.Button.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			holding = true
+			self:_tween(tab.Button, {
+				BackgroundColor3 = darken(hoverColor(), 0.08),
+			}, MOTION.Fast)
+		end
+	end))
+
+	self._maid:Give(tab.Button.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			holding = false
+			self:_tween(tab.Button, {
+				BackgroundColor3 = hovering and hoverColor() or normalColor(),
+			}, MOTION.Fast)
+		end
+	end))
+end
+
+function Window:_bindStrokeFocus(instance, uiStroke)
+	self._maid:Give(instance.Focused:Connect(function()
+		self:_tween(uiStroke, {
+			Color = self.Theme.Accent,
+			Transparency = 0,
+		}, MOTION.Fast)
+	end))
+
+	self._maid:Give(instance.FocusLost:Connect(function()
+		self:_tween(uiStroke, {
+			Color = self.Theme.Stroke,
+			Transparency = 0.35,
+		}, MOTION.Fast)
+	end))
+end
+
 function Window:_selectTab(selectedTab)
 	for _, tab in ipairs(self.Tabs) do
 		local selected = tab == selectedTab
 
 		tab.Content.Visible = selected
 		self:_tween(tab.Button, {
-			BackgroundColor3 = selected and self.Theme.SurfaceLight or self.Theme.Surface,
+			BackgroundColor3 = selected and self.Theme.SurfaceLight or self.Theme.SurfaceMuted,
 			TextColor3 = selected and self.Theme.Text or self.Theme.MutedText,
 		})
+
+		if tab.Accent then
+			self:_tween(tab.Accent, {
+				BackgroundTransparency = selected and 0 or 1,
+			}, MOTION.Fast)
+		end
 	end
 
 	self.CurrentTab = selectedTab
@@ -284,7 +474,7 @@ function Window:CreateTab(tabConfig, icon)
 	local button = Create.new("TextButton", {
 		Name = name .. "TabButton",
 		Size = UDim2.new(1, 0, 0, 38),
-		BackgroundColor3 = self.Theme.Surface,
+		BackgroundColor3 = self.Theme.SurfaceMuted,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
 		Font = DEFAULT_BOLD_FONT,
@@ -296,6 +486,19 @@ function Window:CreateTab(tabConfig, icon)
 		Children = {
 			corner(7),
 			padding(12, 0, 8, 0),
+		},
+	})
+
+	local tabAccent = Create.new("Frame", {
+		Name = "Accent",
+		Position = UDim2.fromOffset(0, 8),
+		Size = UDim2.new(0, 3, 1, -16),
+		BackgroundColor3 = self.Theme.Accent,
+		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		Parent = button,
+		Children = {
+			corner(2),
 		},
 	})
 
@@ -321,12 +524,14 @@ function Window:CreateTab(tabConfig, icon)
 	local tab = setmetatable({
 		Name = name,
 		Button = button,
+		Accent = tabAccent,
 		Content = content,
 		Layout = layout,
 		Window = self,
 	}, Tab)
 
 	table.insert(self.Tabs, tab)
+	self:_bindTabMotion(tab)
 
 	self._maid:Give(button.MouseButton1Click:Connect(function()
 		self:_selectTab(tab)
@@ -345,6 +550,14 @@ end
 
 function Window:CreateSection(config)
 	return self:_activeTab():CreateSection(config)
+end
+
+function Window:CreateParagraph(config)
+	return self:_activeTab():CreateParagraph(config)
+end
+
+function Window:CreateDivider(config)
+	return self:_activeTab():CreateDivider(config)
 end
 
 function Window:CreateButton(config)
@@ -367,6 +580,10 @@ function Window:CreateInput(config)
 	return self:_activeTab():CreateInput(config)
 end
 
+function Window:CreateKeybind(config)
+	return self:_activeTab():CreateKeybind(config)
+end
+
 function Window:Notify(config)
 	config = config or {}
 
@@ -378,6 +595,7 @@ function Window:Notify(config)
 		Name = "Notification",
 		Size = UDim2.fromOffset(300, 74),
 		BackgroundColor3 = self.Theme.Surface,
+		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		Parent = self.NotificationHolder,
 		Children = {
@@ -414,6 +632,19 @@ function Window:Notify(config)
 		Parent = toast,
 	})
 
+	local progress = Create.new("Frame", {
+		Name = "Progress",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 1, 0),
+		Size = UDim2.new(1, 0, 0, 3),
+		BackgroundColor3 = self.Theme.Accent,
+		BorderSizePixel = 0,
+		Parent = toast,
+		Children = {
+			gradient(self.Theme, 0),
+		},
+	})
+
 	local close = Create.new("TextButton", {
 		Name = "Close",
 		AnchorPoint = Vector2.new(1, 0),
@@ -428,8 +659,10 @@ function Window:Notify(config)
 		Parent = toast,
 	})
 
+	local closing = false
 	local function dismiss()
-		if toast.Parent then
+		if toast.Parent and not closing then
+			closing = true
 			animate(toast, {
 				BackgroundTransparency = 1,
 			}, 0.12)
@@ -442,14 +675,82 @@ function Window:Notify(config)
 		end
 	end
 
+	animate(toast, {
+		BackgroundTransparency = 0,
+	}, MOTION.Normal)
+	animate(progress, {
+		Size = UDim2.new(0, 0, 0, 3),
+	}, duration)
+	self:_bindButtonMotion(close, self.Theme.Surface, self.Theme.SurfaceLight, darken(self.Theme.SurfaceLight, 0.08))
 	self._maid:Give(close.MouseButton1Click:Connect(dismiss))
 	task.delay(duration, dismiss)
 
 	return toast
 end
 
+function Window:SetMinimized(minimized)
+	if self._minimized == minimized then
+		return
+	end
+
+	self._minimized = minimized
+	if self.MinimizeButton then
+		self.MinimizeButton.Text = minimized and "+" or "-"
+	end
+
+	if not minimized then
+		self.Sidebar.Visible = true
+		self.ContentHolder.Visible = true
+	end
+
+	self:_tween(self.Container, {
+		Size = minimized and UDim2.new(self._windowSize.X.Scale, self._windowSize.X.Offset, 0, 48) or self._windowSize,
+	}, MOTION.Slow)
+
+	self:_tween(self.Sidebar, {
+		BackgroundTransparency = minimized and 1 or 0,
+	}, MOTION.Normal)
+
+	self:_tween(self.ContentHolder, {
+		BackgroundTransparency = minimized and 1 or 0,
+	}, MOTION.Normal)
+
+	if minimized then
+		task.delay(MOTION.Normal, function()
+			if self._minimized then
+				self.Sidebar.Visible = false
+				self.ContentHolder.Visible = false
+			end
+		end)
+	end
+end
+
+function Window:Toggle()
+	self:SetMinimized(not self._minimized)
+end
+
 function Window:Destroy()
-	self._maid:Clean()
+	if self._destroying then
+		return
+	end
+
+	self._destroying = true
+
+	if self.Scale then
+		self:_tween(self.Scale, {
+			Scale = 0.96,
+		}, MOTION.Fast)
+	end
+
+	if self.Root then
+		self:_tween(self.Root, {
+			BackgroundTransparency = 1,
+		}, MOTION.Fast)
+	end
+
+	task.delay(MOTION.Fast + 0.02, function()
+		self._maid:Clean()
+	end)
 end
 
 function Tab:_createRow(name, height)
@@ -463,6 +764,13 @@ function Tab:_createRow(name, height)
 		Children = {
 			corner(8),
 			stroke(self.Window.Theme, 0.35),
+			Create.new("UIGradient", {
+				Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, self.Window.Theme.Surface),
+					ColorSequenceKeypoint.new(1, self.Window.Theme.SurfaceMuted),
+				}),
+				Rotation = 90,
+			}),
 		},
 	})
 
@@ -486,17 +794,41 @@ end
 function Tab:CreateSection(config)
 	local name = getName(config, "Section")
 
-	return Create.new("TextLabel", {
+	local holder = Create.new("Frame", {
 		Name = name .. "Section",
 		Size = UDim2.new(1, 0, 0, 30),
 		BackgroundTransparency = 1,
+		Parent = self.Content,
+	})
+
+	Create.new("TextLabel", {
+		Name = "Title",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, 0),
+		Size = UDim2.new(0.55, 0, 1, 0),
 		Font = DEFAULT_BOLD_FONT,
 		Text = name,
 		TextColor3 = self.Window.Theme.Accent,
 		TextSize = 13,
 		TextXAlignment = Enum.TextXAlignment.Left,
-		Parent = self.Content,
+		Parent = holder,
 	})
+
+	Create.new("Frame", {
+		Name = "Line",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, 0, 0.5, 0),
+		Size = UDim2.new(0.42, 0, 0, 1),
+		BackgroundColor3 = self.Window.Theme.Stroke,
+		BackgroundTransparency = 0.2,
+		BorderSizePixel = 0,
+		Parent = holder,
+		Children = {
+			gradient(self.Window.Theme, 0),
+		},
+	})
+
+	return holder
 end
 
 function Tab:CreateLabel(config)
@@ -513,6 +845,95 @@ function Tab:CreateLabel(config)
 		TextWrapped = true,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = self.Content,
+	})
+end
+
+function Tab:CreateParagraph(config)
+	config = config or {}
+
+	local title = config.Title or config.Name or "Paragraph"
+	local content = config.Content or config.Text or config.Description or ""
+	local height = config.Height or 92
+
+	local row = Create.new("Frame", {
+		Name = title,
+		Size = UDim2.new(1, 0, 0, height),
+		BackgroundColor3 = self.Window.Theme.Surface,
+		BorderSizePixel = 0,
+		Parent = self.Content,
+		Children = {
+			corner(8),
+			stroke(self.Window.Theme, 0.35),
+			padding(14, 12, 14, 12),
+			listLayout(6),
+			Create.new("UIGradient", {
+				Color = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, self.Window.Theme.Surface),
+					ColorSequenceKeypoint.new(1, self.Window.Theme.SurfaceMuted),
+				}),
+				Rotation = 90,
+			}),
+		},
+	})
+
+	local titleLabel = Create.new("TextLabel", {
+		Name = "Title",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 20),
+		Font = DEFAULT_BOLD_FONT,
+		Text = title,
+		TextColor3 = self.Window.Theme.Text,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Parent = row,
+	})
+
+	local bodyLabel = Create.new("TextLabel", {
+		Name = "Body",
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 1, -26),
+		Font = DEFAULT_FONT,
+		Text = content,
+		TextColor3 = self.Window.Theme.MutedText,
+		TextSize = 12,
+		TextWrapped = true,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextYAlignment = Enum.TextYAlignment.Top,
+		Parent = row,
+	})
+
+	return {
+		Instance = row,
+		Set = function(_, nextConfig)
+			if type(nextConfig) == "table" then
+				titleLabel.Text = nextConfig.Title or nextConfig.Name or titleLabel.Text
+				bodyLabel.Text = nextConfig.Content or nextConfig.Text or nextConfig.Description or bodyLabel.Text
+			else
+				bodyLabel.Text = tostring(nextConfig)
+			end
+		end,
+	}
+end
+
+function Tab:CreateDivider(config)
+	local name = getName(config, "Divider")
+
+	return Create.new("Frame", {
+		Name = name,
+		Size = UDim2.new(1, 0, 0, 12),
+		BackgroundTransparency = 1,
+		Parent = self.Content,
+		Children = {
+			Create.new("Frame", {
+				Name = "Line",
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0.5, 0.5),
+				Size = UDim2.new(1, 0, 0, 1),
+				BackgroundColor3 = self.Window.Theme.Stroke,
+				BackgroundTransparency = 0.35,
+				BorderSizePixel = 0,
+			}),
+		},
 	})
 end
 
@@ -535,9 +956,11 @@ function Tab:CreateButton(config)
 		Parent = row,
 		Children = {
 			corner(7),
+			gradient(self.Window.Theme, 0),
 		},
 	})
 
+	self.Window:_bindButtonMotion(button, self.Window.Theme.Accent, self.Window.Theme.AccentLight, self.Window.Theme.AccentDark)
 	self.Window._maid:Give(button.MouseButton1Click:Connect(function()
 		self.Window:_run(config.Callback)
 	end))
@@ -569,6 +992,7 @@ function Tab:CreateToggle(config)
 		Parent = row,
 		Children = {
 			corner(13),
+			stroke(self.Window.Theme, 0.55),
 		},
 	})
 
@@ -668,6 +1092,7 @@ function Tab:CreateSlider(config)
 		Parent = track,
 		Children = {
 			corner(3),
+			gradient(self.Window.Theme, 0),
 		},
 	})
 
@@ -683,6 +1108,7 @@ function Tab:CreateSlider(config)
 		Parent = track,
 		Children = {
 			corner(8),
+			stroke(self.Window.Theme, 0.3),
 		},
 	})
 
@@ -777,6 +1203,7 @@ function Tab:CreateSlider(config)
 		end
 	end))
 
+	self.Window:_bindButtonMotion(knob, Color3.fromRGB(255, 255, 255), self.Window.Theme.AccentLight, self.Window.Theme.Accent)
 	slider:Set(value, true)
 
 	return slider
@@ -833,8 +1260,12 @@ function Tab:CreateDropdown(config)
 
 	local function renderOpen()
 		local height = open and (58 + optionHeight()) or 48
-		row.Size = UDim2.new(1, 0, 0, height)
-		optionHolder.Size = UDim2.new(1, -24, 0, optionHeight())
+		self.Window:_tween(row, {
+			Size = UDim2.new(1, 0, 0, height),
+		}, MOTION.Normal)
+		self.Window:_tween(optionHolder, {
+			Size = UDim2.new(1, -24, 0, optionHeight()),
+		}, MOTION.Normal)
 	end
 
 	function dropdown:Set(option, silent)
@@ -874,6 +1305,7 @@ function Tab:CreateDropdown(config)
 				},
 			})
 
+			self.Window:_bindButtonMotion(optionButton, self.Window.Theme.SurfaceLight, lighten(self.Window.Theme.SurfaceLight, 0.08), darken(self.Window.Theme.SurfaceLight, 0.06))
 			self.Window._maid:Give(optionButton.MouseButton1Click:Connect(function()
 				dropdown:Set(option)
 				open = false
@@ -898,6 +1330,7 @@ function Tab:CreateDropdown(config)
 		return selected
 	end
 
+	self.Window:_bindButtonMotion(dropdownButton, self.Window.Theme.SurfaceLight, lighten(self.Window.Theme.SurfaceLight, 0.08), darken(self.Window.Theme.SurfaceLight, 0.06))
 	self.Window._maid:Give(dropdownButton.MouseButton1Click:Connect(function()
 		open = not open
 		renderOpen()
@@ -913,6 +1346,7 @@ function Tab:CreateInput(config)
 	config = config or {}
 
 	local row = self:_createRow(config.Name or "Input", 58)
+	local boxStroke = stroke(self.Window.Theme, 0.35)
 
 	local box = Create.new("TextBox", {
 		Name = "TextBox",
@@ -931,6 +1365,7 @@ function Tab:CreateInput(config)
 		Parent = row,
 		Children = {
 			corner(7),
+			boxStroke,
 			padding(10, 0, 10, 0),
 		},
 	})
@@ -965,9 +1400,86 @@ function Tab:CreateInput(config)
 		end
 	end))
 
+	self.Window:_bindStrokeFocus(box, boxStroke)
 	inputObject:Set(box.Text, true)
 
 	return inputObject
+end
+
+function Tab:CreateKeybind(config)
+	config = config or {}
+
+	local row = self:_createRow(config.Name or "Keybind", 48)
+	local currentKey = resolveKeyCode(config.CurrentKeybind or config.Keybind or config.Key or Enum.KeyCode.Unknown)
+	local listening = false
+
+	local keyButton = Create.new("TextButton", {
+		Name = "KeyButton",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -12, 0.5, 0),
+		Size = UDim2.fromOffset(116, 30),
+		BackgroundColor3 = self.Window.Theme.SurfaceLight,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+		Font = DEFAULT_BOLD_FONT,
+		Text = currentKey ~= Enum.KeyCode.Unknown and currentKey.Name or "None",
+		TextColor3 = self.Window.Theme.Text,
+		TextSize = 13,
+		Parent = row,
+		Children = {
+			corner(7),
+			stroke(self.Window.Theme, 0.45),
+		},
+	})
+
+	local keybind = {}
+
+	function keybind:Set(nextKey, silent)
+		currentKey = resolveKeyCode(nextKey)
+		keyButton.Text = currentKey ~= Enum.KeyCode.Unknown and currentKey.Name or "None"
+
+		if config.Flag then
+			self.Window.Flags[config.Flag] = currentKey
+		end
+
+		if not silent and config.Changed then
+			self.Window:_run(config.Changed, currentKey)
+		end
+	end
+
+	function keybind:Get()
+		return currentKey
+	end
+
+	self.Window:_bindButtonMotion(keyButton, self.Window.Theme.SurfaceLight, lighten(self.Window.Theme.SurfaceLight, 0.08), darken(self.Window.Theme.SurfaceLight, 0.06))
+	self.Window._maid:Give(keyButton.MouseButton1Click:Connect(function()
+		listening = true
+		keyButton.Text = "..."
+	end))
+
+	self.Window._maid:Give(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed and not config.IgnoreGameProcessed then
+			return
+		end
+
+		if input.UserInputType ~= Enum.UserInputType.Keyboard then
+			return
+		end
+
+		if listening then
+			listening = false
+			keybind:Set(input.KeyCode)
+			return
+		end
+
+		if currentKey ~= Enum.KeyCode.Unknown and input.KeyCode == currentKey then
+			self.Window:_run(config.Callback, currentKey)
+		end
+	end))
+
+	keybind:Set(currentKey, true)
+
+	return keybind
 end
 
 local function makeWindow(config)
@@ -984,14 +1496,57 @@ local function makeWindow(config)
 
 	local windowSize = config.Size or UDim2.fromOffset(560, 420)
 
-	local root = Create.new("Frame", {
-		Name = "Window",
+	local container = Create.new("Frame", {
+		Name = "KryptexContainer",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = config.Position or UDim2.fromScale(0.5, 0.5),
 		Size = windowSize,
+		BackgroundTransparency = 1,
+		Parent = screenGui,
+	})
+
+	local windowScale = Create.new("UIScale", {
+		Scale = 0.96,
+		Parent = container,
+	})
+
+	local shadow = Create.new("Frame", {
+		Name = "Shadow",
+		Position = UDim2.fromOffset(0, 10),
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = theme.Shadow,
+		BackgroundTransparency = 0.65,
+		BorderSizePixel = 0,
+		ZIndex = 0,
+		Parent = container,
+		Children = {
+			corner(14),
+		},
+	})
+
+	local glow = Create.new("Frame", {
+		Name = "Glow",
+		Position = UDim2.fromOffset(-1, -1),
+		Size = UDim2.new(1, 2, 1, 2),
+		BackgroundColor3 = theme.Glow or theme.Accent,
+		BackgroundTransparency = 0.96,
+		BorderSizePixel = 0,
+		ZIndex = 1,
+		Parent = container,
+		Children = {
+			corner(12),
+			gradient(theme, 35),
+		},
+	})
+
+	local root = Create.new("Frame", {
+		Name = "Window",
+		Size = UDim2.fromScale(1, 1),
 		BackgroundColor3 = theme.Background,
 		BorderSizePixel = 0,
-		Parent = screenGui,
+		ClipsDescendants = true,
+		ZIndex = 2,
+		Parent = container,
 		Children = {
 			corner(10),
 			stroke(theme, 0.15),
@@ -1018,6 +1573,18 @@ local function makeWindow(config)
 		Parent = topbar,
 	})
 
+	Create.new("Frame", {
+		Name = "AccentBar",
+		Position = UDim2.new(0, 0, 1, -2),
+		Size = UDim2.new(1, 0, 0, 2),
+		BackgroundColor3 = theme.Accent,
+		BorderSizePixel = 0,
+		Parent = topbar,
+		Children = {
+			gradient(theme, 0),
+		},
+	})
+
 	Create.new("TextLabel", {
 		Name = "Title",
 		BackgroundTransparency = 1,
@@ -1029,6 +1596,38 @@ local function makeWindow(config)
 		TextSize = 16,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		Parent = topbar,
+	})
+
+	Create.new("TextLabel", {
+		Name = "Version",
+		AnchorPoint = Vector2.new(1, 0.5),
+		BackgroundTransparency = 1,
+		Position = UDim2.new(1, -88, 0.5, 0),
+		Size = UDim2.fromOffset(72, 20),
+		Font = DEFAULT_BOLD_FONT,
+		Text = "v" .. KryptexUI.Version,
+		TextColor3 = theme.MutedText,
+		TextSize = 11,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		Parent = topbar,
+	})
+
+	local minimize = Create.new("TextButton", {
+		Name = "Minimize",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -50, 0.5, 0),
+		Size = UDim2.fromOffset(28, 28),
+		BackgroundColor3 = theme.SurfaceLight,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+		Font = DEFAULT_BOLD_FONT,
+		Text = "-",
+		TextColor3 = theme.MutedText,
+		TextSize = 16,
+		Parent = topbar,
+		Children = {
+			corner(7),
+		},
 	})
 
 	local close = Create.new("TextButton", {
@@ -1049,12 +1648,25 @@ local function makeWindow(config)
 		},
 	})
 
-	local tabList = Create.new("Frame", {
-		Name = "TabList",
+	local sidebar = Create.new("Frame", {
+		Name = "Sidebar",
 		Position = UDim2.fromOffset(14, 62),
 		Size = UDim2.new(0, 140, 1, -76),
-		BackgroundTransparency = 1,
+		BackgroundColor3 = theme.SurfaceMuted,
+		BorderSizePixel = 0,
 		Parent = root,
+		Children = {
+			corner(9),
+			stroke(theme, 0.45),
+		},
+	})
+
+	local tabList = Create.new("Frame", {
+		Name = "TabList",
+		Position = UDim2.fromOffset(8, 8),
+		Size = UDim2.new(1, -16, 1, -16),
+		BackgroundTransparency = 1,
+		Parent = sidebar,
 		Children = {
 			listLayout(8),
 		},
@@ -1064,9 +1676,14 @@ local function makeWindow(config)
 		Name = "ContentHolder",
 		Position = UDim2.fromOffset(168, 62),
 		Size = UDim2.new(1, -182, 1, -76),
-		BackgroundTransparency = 1,
+		BackgroundColor3 = theme.SurfaceMuted,
+		BorderSizePixel = 0,
 		ClipsDescendants = true,
 		Parent = root,
+		Children = {
+			corner(9),
+			stroke(theme, 0.45),
+		},
 	})
 
 	local notificationHolder = Create.new("Frame", {
@@ -1088,18 +1705,32 @@ local function makeWindow(config)
 
 	local window = setmetatable({
 		Gui = screenGui,
+		Container = container,
 		Root = root,
+		Shadow = shadow,
+		Glow = glow,
+		Scale = windowScale,
 		Topbar = topbar,
+		MinimizeButton = minimize,
+		Sidebar = sidebar,
 		TabList = tabList,
 		ContentHolder = contentHolder,
 		NotificationHolder = notificationHolder,
 		Theme = theme,
 		Tabs = {},
 		Flags = {},
+		_minimized = false,
+		_windowSize = windowSize,
 		_maid = Maid.new(),
 	}, Window)
 
 	window._maid:Give(screenGui)
+	window:_bindButtonMotion(minimize, theme.SurfaceLight, lighten(theme.SurfaceLight, 0.08), darken(theme.SurfaceLight, 0.08))
+	window:_bindButtonMotion(close, theme.SurfaceLight, theme.Danger, darken(theme.Danger, 0.12))
+	window._maid:Give(minimize.MouseButton1Click:Connect(function()
+		window:Toggle()
+	end))
+
 	window._maid:Give(close.MouseButton1Click:Connect(function()
 		window:Destroy()
 	end))
@@ -1113,7 +1744,7 @@ local function makeWindow(config)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = true
 			dragStart = input.Position
-			startPosition = root.Position
+			startPosition = container.Position
 
 			local endConnection
 			endConnection = input.Changed:Connect(function()
@@ -1137,7 +1768,7 @@ local function makeWindow(config)
 	window._maid:Give(UserInputService.InputChanged:Connect(function(input)
 		if dragging and input == dragInput then
 			local delta = input.Position - dragStart
-			root.Position = UDim2.new(
+			container.Position = UDim2.new(
 				startPosition.X.Scale,
 				startPosition.X.Offset + delta.X,
 				startPosition.Y.Scale,
@@ -1145,6 +1776,16 @@ local function makeWindow(config)
 			)
 		end
 	end))
+
+	window:_tween(windowScale, {
+		Scale = 1,
+	}, MOTION.Slow)
+	window:_tween(shadow, {
+		BackgroundTransparency = 0.38,
+	}, MOTION.Slow)
+	window:_tween(glow, {
+		BackgroundTransparency = 0.9,
+	}, MOTION.Slow)
 
 	if config.LoadingTitle or config.LoadingSubtitle then
 		window:Notify({

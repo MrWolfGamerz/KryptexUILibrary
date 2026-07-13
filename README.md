@@ -1,6 +1,6 @@
 # Kryptex UI Library
 
-Kryptex UI is a Roblox Luau UI library with a Rayfield-style API. It is early, but the first version includes windows, tabs, sections, labels, buttons, toggles, sliders, dropdowns, inputs, notifications, themes, draggable windows, and cleanup.
+Kryptex UI is a Roblox Luau UI library with a Rayfield-style API. It includes polished windows, animated tabs, sections, labels, paragraphs, buttons, toggles, sliders, dropdowns, inputs, keybinds, notifications, themes, draggable/minimizable windows, and cleanup.
 
 ## Quick Start
 
@@ -59,6 +59,13 @@ MainTab:CreateSection("Basics")
 
 MainTab:CreateLabel("Small helper text.")
 
+MainTab:CreateParagraph({
+	Title = "Paragraph",
+	Content = "Use paragraphs for longer descriptions or status text.",
+})
+
+MainTab:CreateDivider("Line")
+
 MainTab:CreateButton({
 	Name = "Button",
 	ButtonText = "Run",
@@ -104,6 +111,14 @@ MainTab:CreateInput({
 		print(text)
 	end,
 })
+
+MainTab:CreateKeybind({
+	Name = "Toggle UI",
+	CurrentKeybind = Enum.KeyCode.RightShift,
+	Callback = function()
+		Window:Toggle()
+	end,
+})
 ```
 
 ## Notifications
@@ -139,15 +154,22 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-dist.ps1
 - `KryptexUI:CreateWindow(config)`
 - `Window:CreateTab(nameOrConfig)`
 - `Window:Notify(config)`
+- `Window:Toggle()`
+- `Window:SetMinimized(boolean)`
 - `Window:Destroy()`
 - `Window:CreateSection(nameOrConfig)`
+- `Window:CreateParagraph(config)`
+- `Window:CreateDivider(nameOrConfig)`
 - `Tab:CreateSection(nameOrConfig)`
 - `Tab:CreateLabel(nameOrConfig)`
+- `Tab:CreateParagraph(config)`
+- `Tab:CreateDivider(nameOrConfig)`
 - `Tab:CreateButton(config)`
 - `Tab:CreateToggle(config)`
 - `Tab:CreateSlider(config)`
 - `Tab:CreateDropdown(config)`
 - `Tab:CreateInput(config)`
+- `Tab:CreateKeybind(config)`
 
 ## Themes
 
