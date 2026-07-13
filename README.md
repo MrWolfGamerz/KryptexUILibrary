@@ -2,9 +2,13 @@
 
 Kryptex UI is a Roblox Luau UI library with a Rayfield-style API. It includes polished windows, animated tabs, sections, labels, paragraphs, buttons, toggles, sliders, dropdowns, inputs, keybinds, notifications, themes, draggable/minimizable windows, and cleanup.
 
+Current version: `v0.4.0`
+
 ## Mobile Support
 
 Kryptex UI is responsive by default. On smaller/touch screens it clamps the window to the viewport, moves tabs into a horizontal scroll strip, increases touch target sizes, resizes notifications, and recalculates layout when the viewport changes.
+
+Interactive controls are designed to work across mouse, touch, keyboard, and gamepad where Roblox exposes the matching input. Buttons, toggles, dropdowns, inputs, and keybinds support whole-row tapping. Sliders support drag, tap-to-set on the slider area, keyboard nudging with arrow/WASD keys, and gamepad nudging with D-pad/L1/R1.
 
 ```lua
 local Window = KryptexUI:CreateWindow({
@@ -64,6 +68,19 @@ MainTab:CreateButton({
 ```
 
 See `examples/standalone-loader.lua` for a fuller loader example with UI parent fallback support.
+
+## QA Script
+
+Use `examples/qa-input.client.lua` when testing executor/mobile behavior. It loads the standalone bundle, creates every current component, logs each callback, exposes flags, and includes buttons that call `Set`, `Get`, and `Refresh` on controls.
+
+Recommended checks:
+
+- Tap/click whole button, toggle, dropdown, input, and keybind rows.
+- Drag sliders slowly and quickly with mouse and touch.
+- Use arrow/WASD keys or D-pad/L1/R1 to nudge the focused slider.
+- Open dropdowns and select options.
+- Resize the viewport or rotate a mobile emulator.
+- Press `Print Flags` and confirm values match the UI.
 
 ## Components
 

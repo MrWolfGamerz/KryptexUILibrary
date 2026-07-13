@@ -55,6 +55,25 @@ MainTab:CreateToggle({
 	end,
 })
 
+MainTab:CreateSlider({
+	Name = "Example Slider",
+	Range = { 0, 100 },
+	Increment = 1,
+	CurrentValue = 50,
+	Callback = function(value)
+		print("Kryptex slider:", value)
+	end,
+})
+
+MainTab:CreateDropdown({
+	Name = "Example Dropdown",
+	Options = { "Alpha", "Beta", "Gamma" },
+	CurrentOption = "Alpha",
+	Callback = function(option)
+		print("Kryptex dropdown:", option)
+	end,
+})
+
 MainTab:CreateKeybind({
 	Name = "Toggle UI",
 	CurrentKeybind = Enum.KeyCode.RightShift,
