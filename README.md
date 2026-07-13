@@ -26,6 +26,32 @@ MainTab:CreateButton({
 })
 ```
 
+## Standalone Loader
+
+For your own experiences and testing environments where you want a single raw GitHub URL, use the bundled file in `dist`:
+
+```lua
+local KryptexUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/MrWolfGamerz/KryptexUILibrary/main/dist/KryptexUI.lua"))()
+
+local Window = KryptexUI:CreateWindow({
+	Name = "Kryptex UI",
+	Theme = "Kryptex",
+	Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"),
+})
+
+local MainTab = Window:CreateTab("Main")
+
+MainTab:CreateButton({
+	Name = "Say Hello",
+	ButtonText = "Run",
+	Callback = function()
+		print("Hello from Kryptex UI")
+	end,
+})
+```
+
+See `examples/standalone-loader.lua` for a fuller loader example with UI parent fallback support.
+
 ## Components
 
 ```lua
@@ -99,6 +125,14 @@ rojo serve default.project.json
 ```
 
 Then connect from the Rojo plugin in Studio.
+
+## Building The Standalone File
+
+After editing files in `src/KryptexUI`, rebuild the loadstring-friendly file:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build-dist.ps1
+```
 
 ## Current API
 
