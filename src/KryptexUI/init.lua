@@ -8,7 +8,7 @@ local Maid = require(script.Utility.Maid)
 local Theme = require(script.Utility.Theme)
 
 local KryptexUI = {
-	Version = "0.4.1",
+	Version = "0.4.2",
 }
 
 local Window = {}
@@ -1323,10 +1323,8 @@ function Tab:CreateSlider(config)
 
 	local slider = {}
 	local dragging = false
-	local dragInput = nil
-	local lastDragX = nil
 	local previousScrollingEnabled = nil
-	local dragStateConnection = nil
+	local dragLoop = nil
 
 	local function snap(newValue)
 		newValue = math.clamp(newValue, minimum, maximum)
@@ -1381,26 +1379,46 @@ function Tab:CreateSlider(config)
 		return value
 	end
 
+	local function getMouseX()
+		local mouseLocation = UserInputService:GetMouseLocation()
+
+		if mouseLocation then
+			return mouseLocation.X
+		end
+
+		return track.AbsolutePosition.X
+	end
+
+	local function getInputX(input)
+		if type(input) == "number" then
+			return input
+		end
+
+		if input and input.Position then
+			return input.Position.X
+		end
+
+		return getMouseX()
+	end
+
 	local function updateFromX(x)
+		local left = track.AbsolutePosition.X
 		local width = track.AbsoluteSize.X
 
 		if width <= 0 then
 			return
 		end
 
-		local alpha = math.clamp((x - track.AbsolutePosition.X) / width, 0, 1)
+		local clampedX = math.clamp(x, left, left + width)
+		local alpha = math.clamp((clampedX - left) / width, 0, 1)
 		slider:Set(minimum + ((maximum - minimum) * alpha))
 	end
 
-	local function clearDragStateConnection()
-		if dragStateConnection then
-			dragStateConnection:Disconnect()
-			dragStateConnection = nil
+	local function stopDrag()
+		if dragLoop then
+			dragLoop:Disconnect()
+			dragLoop = nil
 		end
-	end
-
-	local function endDrag()
-		clearDragStateConnection()
 
 		if previousScrollingEnabled ~= nil and self.Content then
 			self.Content.ScrollingEnabled = previousScrollingEnabled
@@ -1408,62 +1426,61 @@ function Tab:CreateSlider(config)
 
 		previousScrollingEnabled = nil
 		dragging = false
-		dragInput = nil
-		lastDragX = nil
 
 		pcall(function()
 			hitbox.Modal = false
 		end)
 	end
 
-	local function beginDragFromX(x, input)
-		if dragging then
-			dragInput = input or dragInput
-			lastDragX = x
-			updateFromX(x)
+	local function ensureDragLoop()
+		if dragLoop then
 			return
 		end
 
+		dragLoop = RunService.Stepped:Connect(function()
+			if not dragging then
+				stopDrag()
+				return
+			end
+
+			updateFromX(getMouseX())
+		end)
+	end
+
+	local function startDrag(input)
 		if not dragging and self.Content then
 			previousScrollingEnabled = self.Content.ScrollingEnabled
 			self.Content.ScrollingEnabled = false
 		end
 
 		dragging = true
-		dragInput = input or dragInput
-		lastDragX = x
 		self.Window._activeKeyboardSlider = slider
 
 		pcall(function()
 			hitbox.Modal = true
 		end)
 
-		if input then
-			dragStateConnection = input.Changed:Connect(function()
+		updateFromX(getInputX(input))
+		ensureDragLoop()
+
+		if typeof(input) == "InputObject" then
+			local connection
+			connection = input.Changed:Connect(function()
 				if isFinishedInputState(input.UserInputState) then
-					endDrag()
+					if connection then
+						connection:Disconnect()
+					end
+
+					stopDrag()
 				end
 			end)
+
+			self.Window._maid:Give(connection)
 		end
-
-		updateFromX(x)
 	end
 
-	local function beginDrag(input)
-		beginDragFromX(getPointerPosition(input).X, input)
-	end
-
-	local function inputIsInSliderArea(input)
-		if not guiIsVisible(row) then
-			return false
-		end
-
-		return guiContainsPoint(row, getPointerPosition(input))
-	end
-
-	local function beginDragFromMouseLocation()
-		local mouseLocation = UserInputService:GetMouseLocation()
-		beginDragFromX(mouseLocation.X)
+	local function startDragFromMouseButton(x)
+		startDrag(x or getMouseX())
 	end
 
 	local function nudge(direction)
@@ -1488,17 +1505,13 @@ function Tab:CreateSlider(config)
 	end
 
 	self.Window._maid:Give(function()
-		clearDragStateConnection()
+		stopDrag()
 	end)
 
-	self.Window._maid:Give(hitbox.MouseButton1Down:Connect(beginDragFromMouseLocation))
-	self.Window._maid:Give(knob.MouseButton1Down:Connect(beginDragFromMouseLocation))
-	connectEvent(self.Window._maid, hitbox, "MouseMoved", function(x)
-		if dragging then
-			lastDragX = x
-			updateFromX(x)
-		end
-	end)
+	self.Window._maid:Give(hitbox.MouseButton1Down:Connect(startDragFromMouseButton))
+	self.Window._maid:Give(knob.MouseButton1Down:Connect(startDragFromMouseButton))
+	connectEvent(self.Window._maid, hitbox, "MouseButton1Up", stopDrag)
+	connectEvent(self.Window._maid, knob, "MouseButton1Up", stopDrag)
 	self.Window._maid:Give(hitbox.SelectionGained:Connect(function()
 		self.Window._activeKeyboardSlider = slider
 	end))
@@ -1508,37 +1521,27 @@ function Tab:CreateSlider(config)
 
 	self.Window._maid:Give(hitbox.InputBegan:Connect(function(input)
 		if isPressInput(input) then
-			beginDrag(input)
+			startDrag(input)
 		else
 			nudgeFromInput(input)
 		end
 	end))
 
-	connectEvent(self.Window._maid, hitbox, "TouchPan", function(touchPositions, _, _, state)
-		if state == Enum.UserInputState.Begin
-			or state == Enum.UserInputState.Change then
-			local position = touchPositions and touchPositions[1]
-
-			if position then
-				local x = position.X or position.x
-				if x then
-					beginDragFromX(x)
-				end
-			end
-		elseif isFinishedInputState(state) then
-			endDrag()
+	self.Window._maid:Give(hitbox.InputEnded:Connect(function(input)
+		if isReleaseInput(input) then
+			stopDrag()
 		end
-	end)
+	end))
 
 	self.Window._maid:Give(track.InputBegan:Connect(function(input)
 		if isPressInput(input) then
-			beginDrag(input)
+			startDrag(input)
 		end
 	end))
 
 	self.Window._maid:Give(knob.InputBegan:Connect(function(input)
 		if isPressInput(input) then
-			beginDrag(input)
+			startDrag(input)
 		else
 			nudgeFromInput(input)
 		end
@@ -1553,14 +1556,14 @@ function Tab:CreateSlider(config)
 			return
 		end
 
-		if inputIsInSliderArea(input) then
-			beginDrag(input)
+		if guiIsVisible(row) and guiContainsPoint(row, getPointerPosition(input)) then
+			startDrag(input)
 		end
 	end))
 
 	connectEvent(self.Window._maid, UserInputService, "TouchStarted", function(input)
-		if inputIsInSliderArea(input) then
-			beginDrag(input)
+		if guiIsVisible(row) and guiContainsPoint(row, getPointerPosition(input)) then
+			startDrag(input)
 		end
 	end)
 
@@ -1570,29 +1573,26 @@ function Tab:CreateSlider(config)
 		end
 
 		if input.UserInputType == Enum.UserInputType.MouseMovement
-			or input == dragInput
 			or input.UserInputType == Enum.UserInputType.Touch then
-			lastDragX = getPointerPosition(input).X
-			updateFromX(lastDragX)
+			updateFromX(getInputX(input))
 		end
 	end))
 
 	self.Window._maid:Give(UserInputService.InputEnded:Connect(function(input)
-		if isReleaseInput(input) or input == dragInput then
-			endDrag()
+		if isReleaseInput(input) then
+			stopDrag()
 		end
 	end))
 
 	self.Window._maid:Give(UserInputService.TouchMoved:Connect(function(input)
 		if dragging then
-			lastDragX = getPointerPosition(input).X
-			updateFromX(lastDragX)
+			updateFromX(getInputX(input))
 		end
 	end))
 
 	self.Window._maid:Give(UserInputService.TouchEnded:Connect(function(input)
-		if dragging and (input == dragInput or dragInput == nil or dragInput.UserInputType == Enum.UserInputType.Touch) then
-			endDrag()
+		if dragging then
+			stopDrag()
 		end
 	end))
 
@@ -1607,34 +1607,16 @@ function Tab:CreateSlider(config)
 	if mouse then
 		self.Window._maid:Give(mouse.Move:Connect(function()
 			if dragging then
-				lastDragX = mouse.X
-				updateFromX(lastDragX)
+				updateFromX(mouse.X)
 			end
 		end))
 
 		self.Window._maid:Give(mouse.Button1Up:Connect(function()
 			if dragging then
-				endDrag()
+				stopDrag()
 			end
 		end))
 	end
-
-	self.Window._maid:Give(RunService.RenderStepped:Connect(function()
-		if not dragging then
-			return
-		end
-
-		if dragInput and dragInput.UserInputType == Enum.UserInputType.Touch and lastDragX then
-			updateFromX(lastDragX)
-			return
-		end
-
-		local mouseLocation = UserInputService:GetMouseLocation()
-
-		if mouseLocation then
-			updateFromX(mouseLocation.X)
-		end
-	end))
 
 	self.Window:_bindButtonMotion(knob, Color3.fromRGB(255, 255, 255), self.Window.Theme.AccentLight, self.Window.Theme.Accent)
 	slider:Set(value, true)

@@ -2,7 +2,7 @@
 
 Kryptex UI is a Roblox Luau UI library with a Rayfield-style API. It includes polished windows, animated tabs, sections, labels, paragraphs, buttons, toggles, sliders, dropdowns, inputs, keybinds, notifications, themes, draggable/minimizable windows, and cleanup.
 
-Current version: `v0.4.1`
+Current version: `v0.4.2`
 
 ## Mobile Support
 
