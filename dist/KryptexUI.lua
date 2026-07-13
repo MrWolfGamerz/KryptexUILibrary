@@ -157,7 +157,7 @@ local UserInputService = game:GetService("UserInputService")
 
 
 local KryptexUI = {
-	Version = "0.3.3",
+	Version = "0.3.4",
 }
 
 local Window = {}
@@ -1242,6 +1242,7 @@ function Tab:CreateSlider(config)
 	local value = tonumber(config.CurrentValue) or minimum
 
 	local row = self:_createRow(config.Name or "Slider", 70)
+	row.Active = true
 
 	local valueLabel = Create.new("TextLabel", {
 		Name = "Value",
@@ -1263,6 +1264,7 @@ function Tab:CreateSlider(config)
 		Size = UDim2.new(1, -28, 0, compact and 8 or 6),
 		BackgroundColor3 = self.Window.Theme.SurfaceLight,
 		BorderSizePixel = 0,
+		Active = true,
 		Parent = row,
 		Children = {
 			corner(3),
@@ -1290,6 +1292,7 @@ function Tab:CreateSlider(config)
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
 		Text = "",
+		Active = true,
 		Parent = track,
 		Children = {
 			corner(8),
@@ -1297,8 +1300,22 @@ function Tab:CreateSlider(config)
 		},
 	})
 
+	local hitbox = Create.new("TextButton", {
+		Name = "Hitbox",
+		Position = UDim2.fromOffset(8, compact and 38 or 36),
+		Size = UDim2.new(1, -16, 0, compact and 40 or 34),
+		BackgroundTransparency = 1,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+		Text = "",
+		Active = true,
+		ZIndex = 8,
+		Parent = row,
+	})
+
 	local slider = {}
 	local dragging = false
+	local dragInput = nil
 
 	local function snap(newValue)
 		newValue = math.clamp(newValue, minimum, maximum)
@@ -1357,8 +1374,15 @@ function Tab:CreateSlider(config)
 
 	local function beginDrag(input)
 		dragging = true
+		dragInput = input
 		updateFromX(input.Position.X)
 	end
+
+	self.Window._maid:Give(hitbox.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			beginDrag(input)
+		end
+	end))
 
 	self.Window._maid:Give(track.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -1377,14 +1401,19 @@ function Tab:CreateSlider(config)
 			return
 		end
 
-		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		if input.UserInputType == Enum.UserInputType.MouseMovement
+			or input == dragInput
+			or input.UserInputType == Enum.UserInputType.Touch then
 			updateFromX(input.Position.X)
 		end
 	end))
 
 	self.Window._maid:Give(UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input == dragInput
+			or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = false
+			dragInput = nil
 		end
 	end))
 
