@@ -7,7 +7,7 @@ local Maid = require(script.Utility.Maid)
 local Theme = require(script.Utility.Theme)
 
 local KryptexUI = {
-	Version = "0.2.0",
+	Version = "0.3.0",
 }
 
 local Window = {}
@@ -81,6 +81,39 @@ local function formatNumber(value)
 	end
 
 	return string.format("%.2f", value)
+end
+
+local function getViewportSize()
+	local camera = workspace.CurrentCamera
+
+	if camera then
+		return camera.ViewportSize
+	end
+
+	return Vector2.new(1280, 720)
+end
+
+local function resolveResponsiveSize(requestedSize, viewportSize, compact)
+	local margin = compact and 16 or 24
+	local maxWidth = math.max(viewportSize.X - margin, 280)
+	local maxHeight = math.max(viewportSize.Y - margin, 260)
+
+	local width = compact and math.min(500, maxWidth) or math.min(560, maxWidth)
+	local height = compact and math.min(560, maxHeight) or math.min(420, maxHeight)
+
+	if typeof(requestedSize) == "UDim2" then
+		width = (viewportSize.X * requestedSize.X.Scale) + requestedSize.X.Offset
+		height = (viewportSize.Y * requestedSize.Y.Scale) + requestedSize.Y.Offset
+	end
+
+	return UDim2.fromOffset(
+		math.floor(math.clamp(width, 280, maxWidth)),
+		math.floor(math.clamp(height, 260, maxHeight))
+	)
+end
+
+local function isCompactViewport(viewportSize)
+	return viewportSize.X <= 560 or (UserInputService.TouchEnabled and viewportSize.X <= 720)
 end
 
 local function resolveKeyCode(keyCode)
@@ -285,6 +318,114 @@ function Window:_bindStrokeFocus(instance, uiStroke)
 	end))
 end
 
+function Window:_applyOrTween(instance, goals, animated, duration)
+	if animated then
+		self:_tween(instance, goals, duration or MOTION.Normal)
+		return
+	end
+
+	for property, value in pairs(goals) do
+		instance[property] = value
+	end
+end
+
+function Window:_refreshTabCanvas()
+	if not self.TabList or not self.TabLayout then
+		return
+	end
+
+	local contentSize = self.TabLayout.AbsoluteContentSize
+
+	if self._compact then
+		self.TabList.CanvasSize = UDim2.fromOffset(contentSize.X + 16, 0)
+	else
+		self.TabList.CanvasSize = UDim2.fromOffset(0, contentSize.Y + 16)
+	end
+end
+
+function Window:_applyResponsiveLayout(animated)
+	if not self._responsive then
+		return
+	end
+
+	local viewportSize = getViewportSize()
+	local compact = isCompactViewport(viewportSize)
+	local nextSize = resolveResponsiveSize(self._requestedSize, viewportSize, compact)
+	local collapsedHeight = compact and 52 or 48
+
+	self._compact = compact
+	self._windowSize = nextSize
+
+	self:_applyOrTween(self.Container, {
+		Size = self._minimized and UDim2.new(nextSize.X.Scale, nextSize.X.Offset, 0, collapsedHeight) or nextSize,
+	}, animated, MOTION.Slow)
+
+	if self.TitleLabel then
+		self.TitleLabel.Position = UDim2.fromOffset(compact and 14 or 18, 0)
+		self.TitleLabel.Size = UDim2.new(1, compact and -108 or -164, 1, 0)
+		self.TitleLabel.TextSize = compact and 14 or 16
+	end
+
+	if self.VersionLabel then
+		self.VersionLabel.Visible = not compact
+	end
+
+	if self.MinimizeButton then
+		self.MinimizeButton.Position = UDim2.new(1, compact and -54 or -50, 0.5, 0)
+		self.MinimizeButton.Size = compact and UDim2.fromOffset(36, 34) or UDim2.fromOffset(28, 28)
+	end
+
+	if self.CloseButton then
+		self.CloseButton.Position = UDim2.new(1, compact and -12 or -14, 0.5, 0)
+		self.CloseButton.Size = compact and UDim2.fromOffset(36, 34) or UDim2.fromOffset(28, 28)
+	end
+
+	if compact then
+		self:_applyOrTween(self.Sidebar, {
+			Position = UDim2.fromOffset(10, 58),
+			Size = UDim2.new(1, -20, 0, 50),
+		}, animated, MOTION.Normal)
+		self:_applyOrTween(self.ContentHolder, {
+			Position = UDim2.fromOffset(10, 118),
+			Size = UDim2.new(1, -20, 1, -128),
+		}, animated, MOTION.Normal)
+
+		self.TabList.ScrollingDirection = Enum.ScrollingDirection.X
+		self.TabLayout.FillDirection = Enum.FillDirection.Horizontal
+		self.TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+		self.TabLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	else
+		self:_applyOrTween(self.Sidebar, {
+			Position = UDim2.fromOffset(14, 62),
+			Size = UDim2.new(0, 140, 1, -76),
+		}, animated, MOTION.Normal)
+		self:_applyOrTween(self.ContentHolder, {
+			Position = UDim2.fromOffset(168, 62),
+			Size = UDim2.new(1, -182, 1, -76),
+		}, animated, MOTION.Normal)
+
+		self.TabList.ScrollingDirection = Enum.ScrollingDirection.Y
+		self.TabLayout.FillDirection = Enum.FillDirection.Vertical
+		self.TabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+		self.TabLayout.VerticalAlignment = Enum.VerticalAlignment.Top
+	end
+
+	for _, tab in ipairs(self.Tabs) do
+		tab.Button.Size = compact and UDim2.fromOffset(118, 38) or UDim2.new(1, 0, 0, 38)
+		tab.Button.TextXAlignment = compact and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
+
+		if tab.Accent then
+			tab.Accent.Position = compact and UDim2.new(0, 10, 1, -3) or UDim2.fromOffset(0, 8)
+			tab.Accent.Size = compact and UDim2.new(1, -20, 0, 3) or UDim2.new(0, 3, 1, -16)
+		end
+	end
+
+	self.NotificationHolder.Position = UDim2.new(1, compact and -10 or -16, 1, compact and -10 or -16)
+	self.NotificationHolder.Size = UDim2.fromOffset(math.min(320, math.max(viewportSize.X - 20, 260)), math.min(320, math.max(viewportSize.Y - 20, 220)))
+
+	self:_refreshTabCanvas()
+end
+
 function Window:_selectTab(selectedTab)
 	for _, tab in ipairs(self.Tabs) do
 		local selected = tab == selectedTab
@@ -323,7 +464,7 @@ function Window:CreateTab(tabConfig, icon)
 
 	local button = Create.new("TextButton", {
 		Name = name .. "TabButton",
-		Size = UDim2.new(1, 0, 0, 38),
+		Size = self._compact and UDim2.fromOffset(118, 38) or UDim2.new(1, 0, 0, 38),
 		BackgroundColor3 = self.Theme.SurfaceMuted,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
@@ -331,7 +472,7 @@ function Window:CreateTab(tabConfig, icon)
 		Text = buttonText,
 		TextColor3 = self.Theme.MutedText,
 		TextSize = 13,
-		TextXAlignment = Enum.TextXAlignment.Left,
+		TextXAlignment = self._compact and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left,
 		Parent = self.TabList,
 		Children = {
 			corner(7),
@@ -341,8 +482,8 @@ function Window:CreateTab(tabConfig, icon)
 
 	local tabAccent = Create.new("Frame", {
 		Name = "Accent",
-		Position = UDim2.fromOffset(0, 8),
-		Size = UDim2.new(0, 3, 1, -16),
+		Position = self._compact and UDim2.new(0, 10, 1, -3) or UDim2.fromOffset(0, 8),
+		Size = self._compact and UDim2.new(1, -20, 0, 3) or UDim2.new(0, 3, 1, -16),
 		BackgroundColor3 = self.Theme.Accent,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -359,7 +500,7 @@ function Window:CreateTab(tabConfig, icon)
 		BorderSizePixel = 0,
 		CanvasSize = UDim2.fromOffset(0, 0),
 		ScrollBarImageColor3 = self.Theme.Accent,
-		ScrollBarThickness = 4,
+		ScrollBarThickness = UserInputService.TouchEnabled and 3 or 4,
 		Visible = false,
 		Parent = self.ContentHolder,
 		Children = {
@@ -382,6 +523,7 @@ function Window:CreateTab(tabConfig, icon)
 
 	table.insert(self.Tabs, tab)
 	self:_bindTabMotion(tab)
+	self:_applyResponsiveLayout(false)
 
 	self._maid:Give(button.MouseButton1Click:Connect(function()
 		self:_selectTab(tab)
@@ -443,7 +585,7 @@ function Window:Notify(config)
 
 	local toast = Create.new("Frame", {
 		Name = "Notification",
-		Size = UDim2.fromOffset(300, 74),
+		Size = UDim2.new(1, 0, 0, 74),
 		BackgroundColor3 = self.Theme.Surface,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
@@ -553,8 +695,10 @@ function Window:SetMinimized(minimized)
 		self.ContentHolder.Visible = true
 	end
 
+	local collapsedHeight = self._compact and 52 or 48
+
 	self:_tween(self.Container, {
-		Size = minimized and UDim2.new(self._windowSize.X.Scale, self._windowSize.X.Offset, 0, 48) or self._windowSize,
+		Size = minimized and UDim2.new(self._windowSize.X.Scale, self._windowSize.X.Offset, 0, collapsedHeight) or self._windowSize,
 	}, MOTION.Slow)
 
 	self:_tween(self.Sidebar, {
@@ -604,9 +748,12 @@ function Window:Destroy()
 end
 
 function Tab:_createRow(name, height)
+	local rowHeight = self.Window._compact and math.max(height or 48, 56) or (height or 48)
+	local labelRightPadding = self.Window._compact and 154 or 196
+
 	local row = Create.new("Frame", {
 		Name = name,
-		Size = UDim2.new(1, 0, 0, height or 48),
+		Size = UDim2.new(1, 0, 0, rowHeight),
 		BackgroundColor3 = self.Window.Theme.Surface,
 		BorderSizePixel = 0,
 		ClipsDescendants = true,
@@ -628,7 +775,7 @@ function Tab:_createRow(name, height)
 		Name = "Label",
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(14, 0),
-		Size = UDim2.new(0.55, -14, 0, 48),
+		Size = UDim2.new(1, -labelRightPadding, 0, math.min(rowHeight, 56)),
 		Font = DEFAULT_BOLD_FONT,
 		Text = name,
 		TextColor3 = self.Window.Theme.Text,
@@ -790,12 +937,13 @@ end
 function Tab:CreateButton(config)
 	config = config or {}
 
+	local compact = self.Window._compact
 	local row = self:_createRow(config.Name or config.Text or "Button", 48)
 	local button = Create.new("TextButton", {
 		Name = "Action",
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -12, 0.5, 0),
-		Size = UDim2.fromOffset(116, 30),
+		Size = compact and UDim2.fromOffset(104, 36) or UDim2.fromOffset(116, 30),
 		BackgroundColor3 = self.Window.Theme.Accent,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
@@ -827,6 +975,7 @@ end
 function Tab:CreateToggle(config)
 	config = config or {}
 
+	local compact = self.Window._compact
 	local row = self:_createRow(config.Name or "Toggle", 48)
 	local value = config.CurrentValue == true
 
@@ -834,7 +983,7 @@ function Tab:CreateToggle(config)
 		Name = "Switch",
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -12, 0.5, 0),
-		Size = UDim2.fromOffset(48, 26),
+		Size = compact and UDim2.fromOffset(54, 30) or UDim2.fromOffset(48, 26),
 		BackgroundColor3 = value and self.Window.Theme.Accent or self.Window.Theme.SurfaceLight,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
@@ -849,8 +998,8 @@ function Tab:CreateToggle(config)
 	local knob = Create.new("Frame", {
 		Name = "Knob",
 		AnchorPoint = Vector2.new(0, 0.5),
-		Position = value and UDim2.new(1, -22, 0.5, 0) or UDim2.new(0, 4, 0.5, 0),
-		Size = UDim2.fromOffset(18, 18),
+		Position = value and UDim2.new(1, compact and -26 or -22, 0.5, 0) or UDim2.new(0, 4, 0.5, 0),
+		Size = compact and UDim2.fromOffset(22, 22) or UDim2.fromOffset(18, 18),
 		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 		BorderSizePixel = 0,
 		Parent = switch,
@@ -866,7 +1015,7 @@ function Tab:CreateToggle(config)
 			BackgroundColor3 = value and self.Window.Theme.Accent or self.Window.Theme.SurfaceLight,
 		})
 		self.Window:_tween(knob, {
-			Position = value and UDim2.new(1, -22, 0.5, 0) or UDim2.new(0, 4, 0.5, 0),
+			Position = value and UDim2.new(1, compact and -26 or -22, 0.5, 0) or UDim2.new(0, 4, 0.5, 0),
 		})
 	end
 
@@ -900,6 +1049,7 @@ end
 function Tab:CreateSlider(config)
 	config = config or {}
 
+	local compact = self.Window._compact
 	local range = config.Range or { 0, 100 }
 	local minimum = tonumber(range[1]) or 0
 	local maximum = tonumber(range[2]) or 100
@@ -924,8 +1074,8 @@ function Tab:CreateSlider(config)
 
 	local track = Create.new("Frame", {
 		Name = "Track",
-		Position = UDim2.fromOffset(14, 50),
-		Size = UDim2.new(1, -28, 0, 6),
+		Position = UDim2.fromOffset(14, compact and 52 or 50),
+		Size = UDim2.new(1, -28, 0, compact and 8 or 6),
 		BackgroundColor3 = self.Window.Theme.SurfaceLight,
 		BorderSizePixel = 0,
 		Parent = row,
@@ -950,7 +1100,7 @@ function Tab:CreateSlider(config)
 		Name = "Knob",
 		AnchorPoint = Vector2.new(0.5, 0.5),
 		Position = UDim2.fromScale(0, 0.5),
-		Size = UDim2.fromOffset(16, 16),
+		Size = compact and UDim2.fromOffset(20, 20) or UDim2.fromOffset(16, 16),
 		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
@@ -1062,6 +1212,8 @@ end
 function Tab:CreateDropdown(config)
 	config = config or {}
 
+	local compact = self.Window._compact
+	local optionRowHeight = compact and 36 or 32
 	local options = config.Options or {}
 	local selected = config.CurrentOption or options[1]
 	if type(selected) == "table" then
@@ -1074,8 +1226,8 @@ function Tab:CreateDropdown(config)
 	local dropdownButton = Create.new("TextButton", {
 		Name = "DropdownButton",
 		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -12, 0, 9),
-		Size = UDim2.fromOffset(156, 30),
+		Position = UDim2.new(1, -12, 0, compact and 10 or 9),
+		Size = compact and UDim2.fromOffset(138, 36) or UDim2.fromOffset(156, 30),
 		BackgroundColor3 = self.Window.Theme.SurfaceLight,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
@@ -1105,11 +1257,11 @@ function Tab:CreateDropdown(config)
 	local dropdown = {}
 
 	local function optionHeight()
-		return (#options * 32) + math.max(#options - 1, 0) * 6
+		return (#options * optionRowHeight) + math.max(#options - 1, 0) * 6
 	end
 
 	local function renderOpen()
-		local height = open and (58 + optionHeight()) or 48
+		local height = open and ((compact and 64 or 58) + optionHeight()) or (compact and 56 or 48)
 		self.Window:_tween(row, {
 			Size = UDim2.new(1, 0, 0, height),
 		}, MOTION.Normal)
@@ -1141,7 +1293,7 @@ function Tab:CreateDropdown(config)
 		for _, option in ipairs(options) do
 			local optionButton = Create.new("TextButton", {
 				Name = tostring(option) .. "Option",
-				Size = UDim2.new(1, 0, 0, 32),
+				Size = UDim2.new(1, 0, 0, optionRowHeight),
 				BackgroundColor3 = self.Window.Theme.SurfaceLight,
 				AutoButtonColor = false,
 				BorderSizePixel = 0,
@@ -1195,6 +1347,7 @@ end
 function Tab:CreateInput(config)
 	config = config or {}
 
+	local compact = self.Window._compact
 	local row = self:_createRow(config.Name or "Input", 58)
 	local boxStroke = stroke(self.Window.Theme, 0.35)
 
@@ -1202,7 +1355,7 @@ function Tab:CreateInput(config)
 		Name = "TextBox",
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -12, 0.5, 0),
-		Size = UDim2.fromOffset(174, 32),
+		Size = compact and UDim2.fromOffset(148, 36) or UDim2.fromOffset(174, 32),
 		BackgroundColor3 = self.Window.Theme.SurfaceLight,
 		BorderSizePixel = 0,
 		ClearTextOnFocus = false,
@@ -1259,6 +1412,7 @@ end
 function Tab:CreateKeybind(config)
 	config = config or {}
 
+	local compact = self.Window._compact
 	local row = self:_createRow(config.Name or "Keybind", 48)
 	local currentKey = resolveKeyCode(config.CurrentKeybind or config.Keybind or config.Key or Enum.KeyCode.Unknown)
 	local listening = false
@@ -1267,7 +1421,7 @@ function Tab:CreateKeybind(config)
 		Name = "KeyButton",
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -12, 0.5, 0),
-		Size = UDim2.fromOffset(116, 30),
+		Size = compact and UDim2.fromOffset(104, 36) or UDim2.fromOffset(116, 30),
 		BackgroundColor3 = self.Window.Theme.SurfaceLight,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
@@ -1344,7 +1498,10 @@ local function makeWindow(config)
 		Parent = config.Parent or safePlayerGui(),
 	})
 
-	local windowSize = config.Size or UDim2.fromOffset(560, 420)
+	local responsive = config.Responsive ~= false
+	local viewportSize = getViewportSize()
+	local initialCompact = responsive and isCompactViewport(viewportSize) or false
+	local windowSize = responsive and resolveResponsiveSize(config.Size, viewportSize, initialCompact) or (config.Size or UDim2.fromOffset(560, 420))
 
 	local container = Create.new("Frame", {
 		Name = "KryptexContainer",
@@ -1435,7 +1592,7 @@ local function makeWindow(config)
 		},
 	})
 
-	Create.new("TextLabel", {
+	local titleLabel = Create.new("TextLabel", {
 		Name = "Title",
 		BackgroundTransparency = 1,
 		Position = UDim2.fromOffset(18, 0),
@@ -1448,7 +1605,7 @@ local function makeWindow(config)
 		Parent = topbar,
 	})
 
-	Create.new("TextLabel", {
+	local versionLabel = Create.new("TextLabel", {
 		Name = "Version",
 		AnchorPoint = Vector2.new(1, 0.5),
 		BackgroundTransparency = 1,
@@ -1511,14 +1668,20 @@ local function makeWindow(config)
 		},
 	})
 
-	local tabList = Create.new("Frame", {
+	local tabLayout = listLayout(8)
+	local tabList = Create.new("ScrollingFrame", {
 		Name = "TabList",
 		Position = UDim2.fromOffset(8, 8),
 		Size = UDim2.new(1, -16, 1, -16),
 		BackgroundTransparency = 1,
+		BorderSizePixel = 0,
+		CanvasSize = UDim2.fromOffset(0, 0),
+		ScrollBarImageColor3 = theme.Accent,
+		ScrollBarThickness = UserInputService.TouchEnabled and 3 or 4,
+		ScrollingDirection = initialCompact and Enum.ScrollingDirection.X or Enum.ScrollingDirection.Y,
 		Parent = sidebar,
 		Children = {
-			listLayout(8),
+			tabLayout,
 		},
 	})
 
@@ -1561,20 +1724,31 @@ local function makeWindow(config)
 		Glow = glow,
 		Scale = windowScale,
 		Topbar = topbar,
+		TitleLabel = titleLabel,
+		VersionLabel = versionLabel,
 		MinimizeButton = minimize,
+		CloseButton = close,
 		Sidebar = sidebar,
 		TabList = tabList,
+		TabLayout = tabLayout,
 		ContentHolder = contentHolder,
 		NotificationHolder = notificationHolder,
 		Theme = theme,
 		Tabs = {},
 		Flags = {},
 		_minimized = false,
+		_compact = initialCompact,
+		_requestedSize = config.Size,
+		_responsive = responsive,
 		_windowSize = windowSize,
 		_maid = Maid.new(),
 	}, Window)
 
 	window._maid:Give(screenGui)
+	window._maid:Give(tabLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		window:_refreshTabCanvas()
+	end))
+	window:_applyResponsiveLayout(false)
 	window:_bindButtonMotion(minimize, theme.SurfaceLight, lighten(theme.SurfaceLight, 0.08), darken(theme.SurfaceLight, 0.08))
 	window:_bindButtonMotion(close, theme.SurfaceLight, theme.Danger, darken(theme.Danger, 0.12))
 	window._maid:Give(minimize.MouseButton1Click:Connect(function()
@@ -1625,6 +1799,20 @@ local function makeWindow(config)
 				startPosition.Y.Offset + delta.Y
 			)
 		end
+	end))
+
+	local function watchCamera(camera)
+		if camera then
+			window._maid:Give(camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+				window:_applyResponsiveLayout(true)
+			end))
+		end
+	end
+
+	watchCamera(workspace.CurrentCamera)
+	window._maid:Give(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
+		watchCamera(workspace.CurrentCamera)
+		window:_applyResponsiveLayout(true)
 	end))
 
 	window:_tween(windowScale, {

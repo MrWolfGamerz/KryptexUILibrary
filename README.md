@@ -2,6 +2,19 @@
 
 Kryptex UI is a Roblox Luau UI library with a Rayfield-style API. It includes polished windows, animated tabs, sections, labels, paragraphs, buttons, toggles, sliders, dropdowns, inputs, keybinds, notifications, themes, draggable/minimizable windows, and cleanup.
 
+## Mobile Support
+
+Kryptex UI is responsive by default. On smaller/touch screens it clamps the window to the viewport, moves tabs into a horizontal scroll strip, increases touch target sizes, resizes notifications, and recalculates layout when the viewport changes.
+
+```lua
+local Window = KryptexUI:CreateWindow({
+	Name = "Kryptex UI",
+	Responsive = true, -- default
+})
+```
+
+Set `Responsive = false` only if you want a fixed desktop-style layout.
+
 ## Quick Start
 
 Put `src/KryptexUI` in `ReplicatedStorage`, then require it from a `LocalScript`:
