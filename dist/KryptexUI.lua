@@ -158,7 +158,7 @@ local UserInputService = game:GetService("UserInputService")
 
 
 local KryptexUI = {
-	Version = "0.3.5",
+	Version = "0.3.6",
 }
 
 local Window = {}
@@ -232,6 +232,53 @@ local function formatNumber(value)
 	end
 
 	return string.format("%.2f", value)
+end
+
+local function isPressInput(input)
+	return input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch
+end
+
+local function isReleaseInput(input)
+	return input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch
+end
+
+local function getPointerPosition(input)
+	if input and input.Position then
+		return Vector2.new(input.Position.X, input.Position.Y)
+	end
+
+	local mouseLocation = UserInputService:GetMouseLocation()
+	return Vector2.new(mouseLocation.X, mouseLocation.Y)
+end
+
+local function guiContainsPoint(guiObject, position)
+	if not guiObject or not position then
+		return false
+	end
+
+	local absolutePosition = guiObject.AbsolutePosition
+	local absoluteSize = guiObject.AbsoluteSize
+
+	return position.X >= absolutePosition.X
+		and position.X <= absolutePosition.X + absoluteSize.X
+		and position.Y >= absolutePosition.Y
+		and position.Y <= absolutePosition.Y + absoluteSize.Y
+end
+
+local function guiIsVisible(guiObject)
+	local current = guiObject
+
+	while current and current:IsA("GuiObject") do
+		if not current.Visible then
+			return false
+		end
+
+		current = current.Parent
+	end
+
+	return true
 end
 
 local function getViewportSize()
@@ -384,7 +431,7 @@ function Window:_bindButtonMotion(button, normalColor, hoverColor, pressedColor)
 	end))
 
 	self._maid:Give(button.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		if isPressInput(input) then
 			holding = true
 			self:_tween(button, {
 				BackgroundColor3 = pressedColor,
@@ -393,7 +440,7 @@ function Window:_bindButtonMotion(button, normalColor, hoverColor, pressedColor)
 	end))
 
 	self._maid:Give(button.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		if isReleaseInput(input) then
 			holding = false
 			self:_tween(button, {
 				BackgroundColor3 = hovering and hoverColor or normalColor,
@@ -435,7 +482,7 @@ function Window:_bindTabMotion(tab)
 	end))
 
 	self._maid:Give(tab.Button.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		if isPressInput(input) then
 			holding = true
 			self:_tween(tab.Button, {
 				BackgroundColor3 = darken(hoverColor(), 0.08),
@@ -444,7 +491,7 @@ function Window:_bindTabMotion(tab)
 	end))
 
 	self._maid:Give(tab.Button.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		if isReleaseInput(input) then
 			holding = false
 			self:_tween(tab.Button, {
 				BackgroundColor3 = hovering and hoverColor() or normalColor(),
@@ -1205,20 +1252,13 @@ function Tab:CreateToggle(config)
 	end
 
 	local function inputIsInsideSwitch(input)
-		local position = input.Position
-		local switchPosition = switch.AbsolutePosition
-		local switchSize = switch.AbsoluteSize
-
-		return position.X >= switchPosition.X
-			and position.X <= switchPosition.X + switchSize.X
-			and position.Y >= switchPosition.Y
-			and position.Y <= switchPosition.Y + switchSize.Y
+		return guiContainsPoint(switch, getPointerPosition(input))
 	end
 
 	self.Window._maid:Give(switch.Activated:Connect(flipToggle))
 
 	self.Window._maid:Give(row.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		if isPressInput(input) then
 			if inputIsInsideSwitch(input) then
 				return
 			end
@@ -1266,6 +1306,7 @@ function Tab:CreateSlider(config)
 		BackgroundColor3 = self.Window.Theme.SurfaceLight,
 		BorderSizePixel = 0,
 		Active = true,
+		ZIndex = 2,
 		Parent = row,
 		Children = {
 			corner(3),
@@ -1277,6 +1318,7 @@ function Tab:CreateSlider(config)
 		Size = UDim2.fromScale(0, 1),
 		BackgroundColor3 = self.Window.Theme.Accent,
 		BorderSizePixel = 0,
+		ZIndex = 2,
 		Parent = track,
 		Children = {
 			corner(3),
@@ -1294,6 +1336,7 @@ function Tab:CreateSlider(config)
 		BorderSizePixel = 0,
 		Text = "",
 		Active = true,
+		ZIndex = 3,
 		Parent = track,
 		Children = {
 			corner(8),
@@ -1303,14 +1346,14 @@ function Tab:CreateSlider(config)
 
 	local hitbox = Create.new("TextButton", {
 		Name = "Hitbox",
-		Position = UDim2.fromOffset(8, compact and 38 or 36),
-		Size = UDim2.new(1, -16, 0, compact and 40 or 34),
+		Size = UDim2.fromScale(1, 1),
 		BackgroundTransparency = 1,
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
 		Text = "",
 		Active = true,
-		ZIndex = 8,
+		Selectable = true,
+		ZIndex = 20,
 		Parent = row,
 	})
 
@@ -1318,6 +1361,7 @@ function Tab:CreateSlider(config)
 	local dragging = false
 	local dragInput = nil
 	local lastDragX = nil
+	local previousScrollingEnabled = nil
 
 	local function snap(newValue)
 		newValue = math.clamp(newValue, minimum, maximum)
@@ -1329,7 +1373,7 @@ function Tab:CreateSlider(config)
 		return math.clamp(newValue, minimum, maximum)
 	end
 
-	local function render()
+	local function render(animated)
 		local alpha = 0
 
 		if maximum ~= minimum then
@@ -1337,6 +1381,13 @@ function Tab:CreateSlider(config)
 		end
 
 		valueLabel.Text = formatNumber(value)
+
+		if animated == false then
+			fill.Size = UDim2.new(alpha, 0, 1, 0)
+			knob.Position = UDim2.new(alpha, 0, 0.5, 0)
+			return
+		end
+
 		self.Window:_tween(fill, {
 			Size = UDim2.new(alpha, 0, 1, 0),
 		})
@@ -1352,7 +1403,7 @@ function Tab:CreateSlider(config)
 			self.Window.Flags[config.Flag] = value
 		end
 
-		render()
+		render(not dragging)
 
 		if not silent then
 			self.Window:_run(config.Callback, value)
@@ -1374,31 +1425,49 @@ function Tab:CreateSlider(config)
 		slider:Set(minimum + ((maximum - minimum) * alpha))
 	end
 
+	local function endDrag()
+		if previousScrollingEnabled ~= nil and self.Content then
+			self.Content.ScrollingEnabled = previousScrollingEnabled
+		end
+
+		previousScrollingEnabled = nil
+		dragging = false
+		dragInput = nil
+		lastDragX = nil
+
+		pcall(function()
+			hitbox.Modal = false
+		end)
+	end
+
 	local function beginDragFromX(x, input)
+		if not dragging and self.Content then
+			previousScrollingEnabled = self.Content.ScrollingEnabled
+			self.Content.ScrollingEnabled = false
+		end
+
 		dragging = true
 		dragInput = input or dragInput
 		lastDragX = x
+		self.Window._activeKeyboardSlider = slider
+
+		pcall(function()
+			hitbox.Modal = true
+		end)
+
 		updateFromX(x)
 	end
 
 	local function beginDrag(input)
-		beginDragFromX(input.Position.X, input)
+		beginDragFromX(getPointerPosition(input).X, input)
 	end
 
 	local function inputIsInSliderArea(input)
-		local position = input.Position
-
-		if not position then
+		if not guiIsVisible(row) then
 			return false
 		end
 
-		local areaPosition = hitbox.AbsolutePosition
-		local areaSize = hitbox.AbsoluteSize
-
-		return position.X >= areaPosition.X
-			and position.X <= areaPosition.X + areaSize.X
-			and position.Y >= areaPosition.Y
-			and position.Y <= areaPosition.Y + areaSize.Y
+		return guiContainsPoint(row, getPointerPosition(input))
 	end
 
 	local function beginDragFromMouseLocation()
@@ -1406,29 +1475,57 @@ function Tab:CreateSlider(config)
 		beginDragFromX(mouseLocation.X)
 	end
 
+	local function nudge(direction)
+		local step = increment > 0 and increment or math.max((maximum - minimum) / 100, 1)
+		slider:Set(value + (step * direction))
+	end
+
 	self.Window._maid:Give(hitbox.MouseButton1Down:Connect(beginDragFromMouseLocation))
 	self.Window._maid:Give(knob.MouseButton1Down:Connect(beginDragFromMouseLocation))
+	self.Window._maid:Give(hitbox.SelectionGained:Connect(function()
+		self.Window._activeKeyboardSlider = slider
+	end))
 
 	self.Window._maid:Give(hitbox.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		if isPressInput(input) then
 			beginDrag(input)
+		elseif input.UserInputType == Enum.UserInputType.Keyboard then
+			if input.KeyCode == Enum.KeyCode.Left or input.KeyCode == Enum.KeyCode.A then
+				nudge(-1)
+			elseif input.KeyCode == Enum.KeyCode.Right or input.KeyCode == Enum.KeyCode.D then
+				nudge(1)
+			end
 		end
 	end))
 
 	self.Window._maid:Give(track.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		if isPressInput(input) then
 			beginDrag(input)
 		end
 	end))
 
 	self.Window._maid:Give(knob.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		if isPressInput(input) then
 			beginDrag(input)
 		end
 	end))
 
 	self.Window._maid:Give(UserInputService.InputBegan:Connect(function(input)
-		if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+		if input.UserInputType == Enum.UserInputType.Keyboard and self.Window._activeKeyboardSlider == slider then
+			if UserInputService:GetFocusedTextBox() then
+				return
+			end
+
+			if input.KeyCode == Enum.KeyCode.Left or input.KeyCode == Enum.KeyCode.A then
+				nudge(-1)
+			elseif input.KeyCode == Enum.KeyCode.Right or input.KeyCode == Enum.KeyCode.D then
+				nudge(1)
+			end
+
+			return
+		end
+
+		if not isPressInput(input) then
 			return
 		end
 
@@ -1445,18 +1542,14 @@ function Tab:CreateSlider(config)
 		if input.UserInputType == Enum.UserInputType.MouseMovement
 			or input == dragInput
 			or input.UserInputType == Enum.UserInputType.Touch then
-			lastDragX = input.Position.X
-			updateFromX(input.Position.X)
+			lastDragX = getPointerPosition(input).X
+			updateFromX(lastDragX)
 		end
 	end))
 
 	self.Window._maid:Give(UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1
-			or input == dragInput
-			or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = false
-			dragInput = nil
-			lastDragX = nil
+		if isReleaseInput(input) or input == dragInput then
+			endDrag()
 		end
 	end))
 
@@ -1474,6 +1567,10 @@ function Tab:CreateSlider(config)
 
 		if mouseLocation then
 			updateFromX(mouseLocation.X)
+		end
+
+		if not UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) and (not dragInput or dragInput.UserInputType ~= Enum.UserInputType.Touch) then
+			endDrag()
 		end
 	end))
 
@@ -1839,6 +1936,7 @@ local function makeWindow(config)
 		Size = UDim2.new(1, 0, 0, 48),
 		BackgroundColor3 = theme.Surface,
 		BorderSizePixel = 0,
+		Active = true,
 		Parent = root,
 		Children = {
 			corner(10),
@@ -2039,7 +2137,7 @@ local function makeWindow(config)
 	local startPosition = nil
 
 	window._maid:Give(topbar.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		if isPressInput(input) then
 			dragging = true
 			dragStart = input.Position
 			startPosition = container.Position
