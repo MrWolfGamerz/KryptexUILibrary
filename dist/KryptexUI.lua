@@ -158,7 +158,7 @@ local UserInputService = game:GetService("UserInputService")
 
 
 local KryptexUI = {
-	Version = "0.4.0",
+	Version = "0.4.1",
 }
 
 local Window = {}
@@ -177,6 +177,11 @@ local MOTION = {
 local activeTweens = setmetatable({}, {
 	__mode = "k",
 })
+local INPUT_STATE_CANCEL = nil
+
+pcall(function()
+	INPUT_STATE_CANCEL = Enum.UserInputState.Cancel
+end)
 
 local function corner(radius)
 	return Create.new("UICorner", {
@@ -244,6 +249,11 @@ local function isReleaseInput(input)
 		or input.UserInputType == Enum.UserInputType.Touch
 end
 
+local function isFinishedInputState(state)
+	return state == Enum.UserInputState.End
+		or (INPUT_STATE_CANCEL ~= nil and state == INPUT_STATE_CANCEL)
+end
+
 local function isGamepadInput(input)
 	return typeof(input.UserInputType) == "EnumItem"
 		and string.sub(input.UserInputType.Name, 1, 7) == "Gamepad"
@@ -298,6 +308,61 @@ local function guiIsVisible(guiObject)
 	end
 
 	return true
+end
+
+local function connectEvent(maid, instance, eventName, callback)
+	local ok, signal = pcall(function()
+		return instance[eventName]
+	end)
+
+	if not ok or not signal then
+		return
+	end
+
+	local connected, connection = pcall(function()
+		return signal:Connect(callback)
+	end)
+
+	if connected and connection then
+		maid:Give(connection)
+	end
+end
+
+local function connectPress(maid, guiObject, callback)
+	connectEvent(maid, guiObject, "Activated", function()
+		callback()
+	end)
+
+	connectEvent(maid, guiObject, "MouseButton1Down", function()
+		callback()
+	end)
+
+	connectEvent(maid, guiObject, "TouchTap", function()
+		callback()
+	end)
+
+	connectEvent(maid, guiObject, "InputBegan", function(input)
+		if isPressInput(input) then
+			callback(input)
+		end
+	end)
+end
+
+local function createInputHitbox(parent, name, zIndex, position, size)
+	return Create.new("TextButton", {
+		Name = name or "InputHitbox",
+		Position = position or UDim2.fromScale(0, 0),
+		Size = size or UDim2.fromScale(1, 1),
+		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+		BackgroundTransparency = 0.99,
+		AutoButtonColor = false,
+		BorderSizePixel = 0,
+		Text = "",
+		Active = true,
+		Selectable = false,
+		ZIndex = zIndex or 10,
+		Parent = parent,
+	})
 end
 
 local function getViewportSize()
@@ -1227,6 +1292,7 @@ function Tab:CreateToggle(config)
 		AutoButtonColor = false,
 		BorderSizePixel = 0,
 		Text = "",
+		ZIndex = 3,
 		Parent = row,
 		Children = {
 			corner(13),
@@ -1241,11 +1307,14 @@ function Tab:CreateToggle(config)
 		Size = compact and UDim2.fromOffset(22, 22) or UDim2.fromOffset(18, 18),
 		BackgroundColor3 = Color3.fromRGB(255, 255, 255),
 		BorderSizePixel = 0,
+		ZIndex = 4,
 		Parent = switch,
 		Children = {
 			corner(9),
 		},
 	})
+
+	local toggleHitbox = createInputHitbox(row, "ToggleHitbox", 10)
 
 	local toggle = {}
 
@@ -1286,7 +1355,7 @@ function Tab:CreateToggle(config)
 		toggleLocked = true
 		toggle:Set(not value)
 
-		task.delay(0.08, function()
+		task.delay(0.35, function()
 			toggleLocked = false
 		end)
 	end
@@ -1295,17 +1364,32 @@ function Tab:CreateToggle(config)
 		return guiContainsPoint(switch, getPointerPosition(input))
 	end
 
-	self.Window._maid:Give(switch.Activated:Connect(flipToggle))
+	connectPress(self.Window._maid, switch, flipToggle)
+	connectPress(self.Window._maid, toggleHitbox, flipToggle)
 
 	self.Window._maid:Give(row.InputBegan:Connect(function(input)
 		if isPressInput(input) then
-			if inputIsInsideSwitch(input) then
+			if inputIsInsideSwitch(input) or guiContainsPoint(toggleHitbox, getPointerPosition(input)) then
 				return
 			end
 
 			flipToggle()
 		end
 	end))
+
+	connectEvent(self.Window._maid, UserInputService, "InputBegan", function(input)
+		if isPressInput(input)
+			and guiIsVisible(row)
+			and guiContainsPoint(row, getPointerPosition(input)) then
+			flipToggle()
+		end
+	end)
+
+	connectEvent(self.Window._maid, UserInputService, "TouchStarted", function(input)
+		if guiIsVisible(row) and guiContainsPoint(row, getPointerPosition(input)) then
+			flipToggle()
+		end
+	end)
 
 	toggle:Set(value, true)
 
@@ -1384,20 +1468,8 @@ function Tab:CreateSlider(config)
 		},
 	})
 
-	local hitbox = Create.new("TextButton", {
-		Name = "Hitbox",
-		Position = UDim2.fromOffset(10, compact and 36 or 34),
-		Size = UDim2.new(1, -20, 0, compact and 34 or 30),
-		BackgroundColor3 = self.Window.Theme.Accent,
-		BackgroundTransparency = 0.99,
-		AutoButtonColor = false,
-		BorderSizePixel = 0,
-		Text = "",
-		Active = true,
-		Selectable = true,
-		ZIndex = 4,
-		Parent = row,
-	})
+	local hitbox = createInputHitbox(row, "SliderHitbox", 10)
+	hitbox.Selectable = true
 
 	local slider = {}
 	local dragging = false
@@ -1440,7 +1512,9 @@ function Tab:CreateSlider(config)
 	end
 
 	function slider:Set(newValue, silent)
-		value = snap(tonumber(newValue) or value)
+		local nextValue = snap(tonumber(newValue) or value)
+		local changed = nextValue ~= value
+		value = nextValue
 
 		if config.Flag then
 			self.Window.Flags[config.Flag] = value
@@ -1448,7 +1522,7 @@ function Tab:CreateSlider(config)
 
 		render(not dragging)
 
-		if not silent then
+		if not silent and changed then
 			self.Window:_run(config.Callback, value)
 		end
 	end
@@ -1516,8 +1590,7 @@ function Tab:CreateSlider(config)
 
 		if input then
 			dragStateConnection = input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End
-					or input.UserInputState == Enum.UserInputState.Cancel then
+				if isFinishedInputState(input.UserInputState) then
 					endDrag()
 				end
 			end)
@@ -1535,8 +1608,7 @@ function Tab:CreateSlider(config)
 			return false
 		end
 
-		local position = getPointerPosition(input)
-		return guiContainsPoint(hitbox, position) or guiContainsPoint(knob, position)
+		return guiContainsPoint(row, getPointerPosition(input))
 	end
 
 	local function beginDragFromMouseLocation()
@@ -1571,6 +1643,12 @@ function Tab:CreateSlider(config)
 
 	self.Window._maid:Give(hitbox.MouseButton1Down:Connect(beginDragFromMouseLocation))
 	self.Window._maid:Give(knob.MouseButton1Down:Connect(beginDragFromMouseLocation))
+	connectEvent(self.Window._maid, hitbox, "MouseMoved", function(x)
+		if dragging then
+			lastDragX = x
+			updateFromX(x)
+		end
+	end)
 	self.Window._maid:Give(hitbox.SelectionGained:Connect(function()
 		self.Window._activeKeyboardSlider = slider
 	end))
@@ -1585,6 +1663,22 @@ function Tab:CreateSlider(config)
 			nudgeFromInput(input)
 		end
 	end))
+
+	connectEvent(self.Window._maid, hitbox, "TouchPan", function(touchPositions, _, _, state)
+		if state == Enum.UserInputState.Begin
+			or state == Enum.UserInputState.Change then
+			local position = touchPositions and touchPositions[1]
+
+			if position then
+				local x = position.X or position.x
+				if x then
+					beginDragFromX(x)
+				end
+			end
+		elseif isFinishedInputState(state) then
+			endDrag()
+		end
+	end)
 
 	self.Window._maid:Give(track.InputBegan:Connect(function(input)
 		if isPressInput(input) then
@@ -1613,6 +1707,12 @@ function Tab:CreateSlider(config)
 			beginDrag(input)
 		end
 	end))
+
+	connectEvent(self.Window._maid, UserInputService, "TouchStarted", function(input)
+		if inputIsInSliderArea(input) then
+			beginDrag(input)
+		end
+	end)
 
 	self.Window._maid:Give(UserInputService.InputChanged:Connect(function(input)
 		if not dragging then
@@ -2283,8 +2383,7 @@ local function makeWindow(config)
 
 			local endConnection
 			endConnection = input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End
-					or input.UserInputState == Enum.UserInputState.Cancel then
+				if isFinishedInputState(input.UserInputState) then
 					dragging = false
 
 					if endConnection then
