@@ -8,7 +8,7 @@ local Maid = require(script.Utility.Maid)
 local Theme = require(script.Utility.Theme)
 
 local KryptexUI = {
-	Version = "0.4.2",
+	Version = "0.4.3",
 }
 
 local Window = {}
@@ -1128,6 +1128,7 @@ end
 function Tab:CreateToggle(config)
 	config = config or {}
 
+	local window = self.Window
 	local compact = self.Window._compact
 	local row = self:_createRow(config.Name or "Toggle", 48)
 	row.Active = true
@@ -1181,13 +1182,13 @@ function Tab:CreateToggle(config)
 		value = newValue == true
 
 		if config.Flag then
-			self.Window.Flags[config.Flag] = value
+			window.Flags[config.Flag] = value
 		end
 
 		render()
 
 		if not silent then
-			self.Window:_run(config.Callback, value)
+			window:_run(config.Callback, value)
 		end
 	end
 
@@ -1249,6 +1250,7 @@ end
 function Tab:CreateSlider(config)
 	config = config or {}
 
+	local window = self.Window
 	local compact = self.Window._compact
 	local range = config.Range or { 0, 100 }
 	local minimum = tonumber(range[1]) or 0
@@ -1365,13 +1367,13 @@ function Tab:CreateSlider(config)
 		value = nextValue
 
 		if config.Flag then
-			self.Window.Flags[config.Flag] = value
+			window.Flags[config.Flag] = value
 		end
 
 		render(not dragging)
 
 		if not silent and changed then
-			self.Window:_run(config.Callback, value)
+			window:_run(config.Callback, value)
 		end
 	end
 
@@ -1627,6 +1629,7 @@ end
 function Tab:CreateDropdown(config)
 	config = config or {}
 
+	local window = self.Window
 	local compact = self.Window._compact
 	local optionRowHeight = compact and 36 or 32
 	local options = config.Options or {}
@@ -1691,11 +1694,11 @@ function Tab:CreateDropdown(config)
 		dropdownButton.Text = selected and tostring(selected) or "Select"
 
 		if config.Flag then
-			self.Window.Flags[config.Flag] = selected
+			window.Flags[config.Flag] = selected
 		end
 
 		if not silent then
-			self.Window:_run(config.Callback, selected)
+			window:_run(config.Callback, selected)
 		end
 	end
 
@@ -1775,6 +1778,7 @@ end
 function Tab:CreateInput(config)
 	config = config or {}
 
+	local window = self.Window
 	local compact = self.Window._compact
 	local row = self:_createRow(config.Name or "Input", 58)
 	row.Active = true
@@ -1808,11 +1812,11 @@ function Tab:CreateInput(config)
 		box.Text = tostring(text or "")
 
 		if config.Flag then
-			self.Window.Flags[config.Flag] = box.Text
+			window.Flags[config.Flag] = box.Text
 		end
 
 		if not silent then
-			self.Window:_run(config.Callback, box.Text)
+			window:_run(config.Callback, box.Text)
 		end
 	end
 
@@ -1846,6 +1850,7 @@ end
 function Tab:CreateKeybind(config)
 	config = config or {}
 
+	local window = self.Window
 	local compact = self.Window._compact
 	local row = self:_createRow(config.Name or "Keybind", 48)
 	row.Active = true
@@ -1878,11 +1883,11 @@ function Tab:CreateKeybind(config)
 		keyButton.Text = currentKey ~= Enum.KeyCode.Unknown and currentKey.Name or "None"
 
 		if config.Flag then
-			self.Window.Flags[config.Flag] = currentKey
+			window.Flags[config.Flag] = currentKey
 		end
 
 		if not silent and config.Changed then
-			self.Window:_run(config.Changed, currentKey)
+			window:_run(config.Changed, currentKey)
 		end
 	end
 
