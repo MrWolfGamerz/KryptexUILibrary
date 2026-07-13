@@ -7,7 +7,7 @@ local Maid = require(script.Utility.Maid)
 local Theme = require(script.Utility.Theme)
 
 local KryptexUI = {
-	Version = "0.3.2",
+	Version = "0.3.3",
 }
 
 local Window = {}
@@ -525,7 +525,7 @@ function Window:CreateTab(tabConfig, icon)
 	self:_bindTabMotion(tab)
 	self:_applyResponsiveLayout(false)
 
-	self._maid:Give(button.MouseButton1Click:Connect(function()
+	self._maid:Give(button.Activated:Connect(function()
 		self:_selectTab(tab)
 	end))
 
@@ -674,7 +674,7 @@ function Window:Notify(config)
 		Size = UDim2.new(0, 0, 0, 3),
 	}, duration)
 	self:_bindButtonMotion(close, self.Theme.Surface, self.Theme.SurfaceLight, darken(self.Theme.SurfaceLight, 0.08))
-	self._maid:Give(close.MouseButton1Click:Connect(dismiss))
+	self._maid:Give(close.Activated:Connect(dismiss))
 	task.delay(duration, dismiss)
 
 	return toast
@@ -959,7 +959,7 @@ function Tab:CreateButton(config)
 	})
 
 	self.Window:_bindButtonMotion(button, self.Window.Theme.Accent, self.Window.Theme.AccentLight, self.Window.Theme.AccentDark)
-	self.Window._maid:Give(button.MouseButton1Click:Connect(function()
+	self.Window._maid:Give(button.Activated:Connect(function()
 		self.Window:_run(config.Callback)
 	end))
 
@@ -1343,7 +1343,7 @@ function Tab:CreateDropdown(config)
 			})
 
 			self.Window:_bindButtonMotion(optionButton, self.Window.Theme.SurfaceLight, lighten(self.Window.Theme.SurfaceLight, 0.08), darken(self.Window.Theme.SurfaceLight, 0.06))
-			self.Window._maid:Give(optionButton.MouseButton1Click:Connect(function()
+			self.Window._maid:Give(optionButton.Activated:Connect(function()
 				dropdown:Set(option)
 				open = false
 				renderOpen()
@@ -1368,7 +1368,7 @@ function Tab:CreateDropdown(config)
 	end
 
 	self.Window:_bindButtonMotion(dropdownButton, self.Window.Theme.SurfaceLight, lighten(self.Window.Theme.SurfaceLight, 0.08), darken(self.Window.Theme.SurfaceLight, 0.06))
-	self.Window._maid:Give(dropdownButton.MouseButton1Click:Connect(function()
+	self.Window._maid:Give(dropdownButton.Activated:Connect(function()
 		open = not open
 		renderOpen()
 	end))
@@ -1491,7 +1491,7 @@ function Tab:CreateKeybind(config)
 	end
 
 	self.Window:_bindButtonMotion(keyButton, self.Window.Theme.SurfaceLight, lighten(self.Window.Theme.SurfaceLight, 0.08), darken(self.Window.Theme.SurfaceLight, 0.06))
-	self.Window._maid:Give(keyButton.MouseButton1Click:Connect(function()
+	self.Window._maid:Give(keyButton.Activated:Connect(function()
 		listening = true
 		keyButton.Text = "..."
 	end))
@@ -1786,11 +1786,11 @@ local function makeWindow(config)
 	window:_applyResponsiveLayout(false)
 	window:_bindButtonMotion(minimize, theme.SurfaceLight, lighten(theme.SurfaceLight, 0.08), darken(theme.SurfaceLight, 0.08))
 	window:_bindButtonMotion(close, theme.SurfaceLight, theme.Danger, darken(theme.Danger, 0.12))
-	window._maid:Give(minimize.MouseButton1Click:Connect(function()
+	window._maid:Give(minimize.Activated:Connect(function()
 		window:Toggle()
 	end))
 
-	window._maid:Give(close.MouseButton1Click:Connect(function()
+	window._maid:Give(close.Activated:Connect(function()
 		window:Destroy()
 	end))
 
