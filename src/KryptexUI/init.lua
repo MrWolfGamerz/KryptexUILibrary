@@ -7,7 +7,7 @@ local Maid = require(script.Utility.Maid)
 local Theme = require(script.Utility.Theme)
 
 local KryptexUI = {
-	Version = "0.3.0",
+	Version = "0.3.1",
 }
 
 local Window = {}
@@ -977,6 +977,7 @@ function Tab:CreateToggle(config)
 
 	local compact = self.Window._compact
 	local row = self:_createRow(config.Name or "Toggle", 48)
+	row.Active = true
 	local value = config.CurrentValue == true
 
 	local switch = Create.new("TextButton", {
@@ -1037,8 +1038,27 @@ function Tab:CreateToggle(config)
 		return value
 	end
 
-	self.Window._maid:Give(switch.MouseButton1Click:Connect(function()
+	local toggleLocked = false
+
+	local function flipToggle()
+		if toggleLocked then
+			return
+		end
+
+		toggleLocked = true
 		toggle:Set(not value)
+
+		task.defer(function()
+			toggleLocked = false
+		end)
+	end
+
+	self.Window._maid:Give(switch.Activated:Connect(flipToggle))
+
+	self.Window._maid:Give(row.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			flipToggle()
+		end
 	end))
 
 	toggle:Set(value, true)
