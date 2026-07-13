@@ -1,0 +1,22 @@
+{
+  "name": "KryptexUILibrary",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "KryptexUI": {
+        "$path": "src/KryptexUI"
+      }
+    },
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "KryptexExample": {
+          "$path": "examples/basic.client.lua"
+        }
+      }
+    }
+  }
+}
+
