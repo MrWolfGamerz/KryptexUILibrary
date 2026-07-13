@@ -7,7 +7,7 @@ local Maid = require(script.Utility.Maid)
 local Theme = require(script.Utility.Theme)
 
 local KryptexUI = {
-	Version = "0.3.1",
+	Version = "0.3.2",
 }
 
 local Window = {}
@@ -1053,10 +1053,25 @@ function Tab:CreateToggle(config)
 		end)
 	end
 
+	local function inputIsInsideSwitch(input)
+		local position = input.Position
+		local switchPosition = switch.AbsolutePosition
+		local switchSize = switch.AbsoluteSize
+
+		return position.X >= switchPosition.X
+			and position.X <= switchPosition.X + switchSize.X
+			and position.Y >= switchPosition.Y
+			and position.Y <= switchPosition.Y + switchSize.Y
+	end
+
 	self.Window._maid:Give(switch.Activated:Connect(flipToggle))
 
 	self.Window._maid:Give(row.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			if inputIsInsideSwitch(input) then
+				return
+			end
+
 			flipToggle()
 		end
 	end))
